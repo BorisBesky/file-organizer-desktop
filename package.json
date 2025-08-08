@@ -1,0 +1,35 @@
+{
+  "name": "file-organizer-desktop",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "A cross-platform file organizer application using React and Tauri.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "@tauri-apps/api": "^1.5.3"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.15",
+    "@types/react-dom": "^18.2.7",
+    "@vitejs/plugin-react": "^4.2.1",
+    "typescript": "^5.0.2",
+    "vite": "^5.0.0",
+    "@tauri-apps/cli": "^1.5.9"
+  },
+  "keywords": [
+    "file",
+    "organizer",
+    "desktop",
+    "react",
+    "tauri"
+  ],
+  "author": "Your Name",
+  "license": "MIT"
+}
