@@ -326,7 +326,7 @@ export default function App() {
           onClick={scan} 
           disabled={busy || !directory || scanState === 'scanning' || scanState === 'paused'}
         >
-          {scanState === 'scanning' ? 'Scanning...' : scanState === 'paused' ? 'Paused' : 'Preview'}
+          {scanState === 'scanning' ? 'Scanning...' : scanState === 'paused' ? 'Paused' : 'Scan'}
         </button>
         
         {scanState === 'scanning' && (
@@ -343,7 +343,11 @@ export default function App() {
           </>
         )}
         
-        {(scanState === 'completed' || scanState === 'stopped') && (
+        {scanState === 'stopped' && (
+          <button onClick={resumeScan}>Continue Scan</button>
+        )}
+        
+        {scanState === 'completed' && (
           <button onClick={resetScan}>New Scan</button>
         )}
         
