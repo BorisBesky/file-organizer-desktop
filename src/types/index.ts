@@ -21,3 +21,13 @@ export interface ClassifyResult {
   confidence: number;
   raw?: any;
 }
+
+export type ScanState = 'idle' | 'scanning' | 'paused' | 'stopped' | 'completed';
+
+export interface ScanControl {
+  state: ScanState;
+  shouldPause: boolean;
+  shouldStop: boolean;
+  currentFileIndex: number;
+  processedFiles: any[];
+}

@@ -1,7 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { classifyViaLMStudio, optimizeCategoriesViaLMStudio } from './api';
 import { invoke } from '@tauri-apps/api/tauri';
 import { listen } from '@tauri-apps/api/event';
+import { ScanState } from './types';
 
 function sanitizeFilename(name: string) {
   let out = name.trim().replace(/[\n\r]/g, ' ');
@@ -36,6 +37,17 @@ export default function App() {
   const [events, setEvents] = useState<string[]>([]);
   const [rows, setRows] = useState<Row[]>([]);
   const [progress, setProgress] = useState({ current: 0, total: 0 });
+  
+  // Scan control state
+  const [scanState, setScanState] = useState<ScanState>('idle');
+  const scanControlRef = useRef({
+    shouldPause: false,
+    shouldStop: false,
+    currentFileIndex: 0,
+    processedFiles: [] as any[],
+    allFiles: [] as string[],
+    used: new Set<string>(),
+  });
 
   useEffect(() => {
     const unlisten = listen<string>('directory-selected', (event) => {
@@ -50,70 +62,38 @@ export default function App() {
     invoke('pick_directory');
   };
 
-  const categoriesHint = useMemo(() => {
-    const set = new Set<string>();
-    rows.forEach((r: Row) => { if (r.category) set.add(r.category); });
-    return Array.from(set);
-  }, [rows]);
-
-  const scan = async () => {
-    if (!directory) return alert('Pick a directory first');
-    setBusy(true);
-    setEvents([]);
-    setRows([]);
-    setProgress({ current: 0, total: 0 });
-    const used = new Set<string>();
-    const previews: any[] = [];
-
-    const files: string[] = await invoke('read_directory', { path: directory });
-    const processableFiles = files.filter(f => !splitPath(f).name.startsWith('.'));
-    setProgress({ current: 0, total: processableFiles.length });
-
-    let currentIndex = 0;
-    for (const f of processableFiles) {
-      currentIndex++;
-      setProgress({ current: currentIndex, total: processableFiles.length });
-      
-      let text = '';
-      let readable = false;
-      let reason = 'unsupported';
-
-      try {
-        text = await invoke('read_file_content', { path: f });
-        readable = true;
-        reason = 'text';
-      } catch (e) {
-        // ignore
-      }
-
-      setEvents((prev: string[]) => [...prev, `Reading ${f} (${reason})`]);
-      const info: any = { src: f, readable, reason };
-      if (readable) {
-        setEvents((prev: string[]) => [...prev, `Classifying ${f}`]);
-        let result;
-        try {
-          result = await classifyViaLMStudio({ baseUrl: lmBase, model, text, originalName: splitPath(f).name, categoriesHint });
-        } catch (e: any) {
-          result = { category_path: 'uncategorized', suggested_filename: f.replace(/\.[^/.]+$/, ''), confidence: 0, raw: { error: e?.message || String(e) } };
-        }
-        const ext = '.' + (f.split('.').pop() || '');
-        const safe = sanitizeFilename(result.suggested_filename || f.replace(/\.[^/.]+$/, ''));
-        const dir = sanitizeDirpath(result.category_path || 'uncategorized');
-        const dst = `${directory}/${dir}/${safe}${ext}`;
-        let finalDst = dst;
-        let i = 1;
-        while (used.has(finalDst)) { finalDst = `${directory}/${dir}/${safe}-${i}${ext}`; i += 1; }
-        used.add(finalDst);
-        info.llm = result;
-        info.dst = finalDst;
-        previews.push(info);
-        setEvents((prev: string[]) => [...prev, `Classified ${f} -> ${dir} => ${finalDst}`]);
-      } else {
-        setEvents((prev: string[]) => [...prev, `Skipping ${f}: ${reason}`]);
-        previews.push(info);
-      }
+  const pauseScan = () => {
+    if (scanState === 'scanning') {
+      scanControlRef.current.shouldPause = true;
+      setScanState('paused');
+      setEvents((prev: string[]) => [...prev, 'Scan paused by user']);
     }
+  };
 
+  const resumeScan = () => {
+    if (scanState === 'paused') {
+      scanControlRef.current.shouldPause = false;
+      setScanState('scanning');
+      setEvents((prev: string[]) => [...prev, 'Scan resumed']);
+      // Continue processing from where we left off
+      processRemainingFiles();
+    }
+  };
+
+  const stopScan = async () => {
+    if (scanState === 'scanning' || scanState === 'paused') {
+      scanControlRef.current.shouldStop = true;
+      setScanState('stopped');
+      setEvents((prev: string[]) => [...prev, 'Scan stopped by user']);
+      
+      // Show current progress and send to LM Studio for optimization
+      await finalizeScan();
+    }
+  };
+
+  const finalizeScan = async () => {
+    const previews = scanControlRef.current.processedFiles;
+    
     const outRows: Row[] = previews.map((p: any) => {
       const { name, ext } = splitPath(p.src);
       const category = p.llm ? sanitizeDirpath(p.llm.category_path || 'uncategorized') : 'uncategorized';
@@ -129,9 +109,126 @@ export default function App() {
         enabled: !!p.dst,
       };
     });
+    
     setRows(outRows);
-    setProgress({ current: 0, total: 0 });
+    setProgress({ current: scanControlRef.current.currentFileIndex, total: scanControlRef.current.allFiles.length });
     setBusy(false);
+    setScanState('completed');
+    
+    // Automatically run optimization after scan completion/stop
+    if (outRows.length > 0) {
+      setEvents((prev: string[]) => [...prev, 'Sending current results to LM Studio for optimization...']);
+      await optimizeCategories();
+    }
+  };
+
+  const processRemainingFiles = async () => {
+    const { allFiles, currentFileIndex, processedFiles, used } = scanControlRef.current;
+    
+    for (let i = currentFileIndex; i < allFiles.length; i++) {
+      // Check for pause or stop signals
+      if (scanControlRef.current.shouldPause) {
+        scanControlRef.current.currentFileIndex = i;
+        return;
+      }
+      
+      if (scanControlRef.current.shouldStop) {
+        scanControlRef.current.currentFileIndex = i;
+        await finalizeScan();
+        return;
+      }
+      
+      const f = allFiles[i];
+      scanControlRef.current.currentFileIndex = i + 1;
+      setProgress({ current: i + 1, total: allFiles.length });
+      
+      let text = '';
+      let readable = false;
+      let reason = 'unsupported';
+
+      try {
+        text = await invoke('read_file_content', { path: f });
+        readable = true;
+        reason = 'text';
+      } catch (e) {
+        // ignore
+      }
+
+      setEvents((prev: string[]) => [...prev, `Reading ${f} (${reason})`]);
+      const info: any = { src: f, readable, reason };
+      
+      if (readable) {
+        setEvents((prev: string[]) => [...prev, `Classifying ${f}`]);
+        let result;
+        try {
+          result = await classifyViaLMStudio({ baseUrl: lmBase, model, text, originalName: splitPath(f).name, categoriesHint });
+        } catch (e: any) {
+          result = { category_path: 'uncategorized', suggested_filename: f.replace(/\.[^/.]+$/, ''), confidence: 0, raw: { error: e?.message || String(e) } };
+        }
+        const ext = '.' + (f.split('.').pop() || '');
+        const safe = sanitizeFilename(result.suggested_filename || f.replace(/\.[^/.]+$/, ''));
+        const dir = sanitizeDirpath(result.category_path || 'uncategorized');
+        const dst = `${directory}/${dir}/${safe}${ext}`;
+        let finalDst = dst;
+        let j = 1;
+        while (used.has(finalDst)) { finalDst = `${directory}/${dir}/${safe}-${j}${ext}`; j += 1; }
+        used.add(finalDst);
+        info.llm = result;
+        info.dst = finalDst;
+        processedFiles.push(info);
+        setEvents((prev: string[]) => [...prev, `Classified ${f} -> ${dir} => ${finalDst}`]);
+      } else {
+        setEvents((prev: string[]) => [...prev, `Skipping ${f}: ${reason}`]);
+        processedFiles.push(info);
+      }
+    }
+    
+    // If we reach here, scan completed normally
+    setScanState('completed');
+    await finalizeScan();
+  };
+
+  const categoriesHint = useMemo(() => {
+    const set = new Set<string>();
+    rows.forEach((r: Row) => { if (r.category) set.add(r.category); });
+    return Array.from(set);
+  }, [rows]);
+
+  const scan = async () => {
+    if (!directory) return alert('Pick a directory first');
+    
+    // Reset scan control state
+    scanControlRef.current = {
+      shouldPause: false,
+      shouldStop: false,
+      currentFileIndex: 0,
+      processedFiles: [],
+      allFiles: [],
+      used: new Set<string>(),
+    };
+    
+    setBusy(true);
+    setScanState('scanning');
+    setEvents([]);
+    setRows([]);
+    setProgress({ current: 0, total: 0 });
+
+    try {
+      const files: string[] = await invoke('read_directory', { path: directory });
+      const processableFiles = files.filter(f => !splitPath(f).name.startsWith('.'));
+      
+      scanControlRef.current.allFiles = processableFiles;
+      setProgress({ current: 0, total: processableFiles.length });
+      
+      setEvents((prev: string[]) => [...prev, `Found ${processableFiles.length} files to process`]);
+      
+      // Start processing files
+      await processRemainingFiles();
+    } catch (error: any) {
+      setEvents((prev: string[]) => [...prev, `Error reading directory: ${error.message || String(error)}`]);
+      setBusy(false);
+      setScanState('idle');
+    }
   };
 
   const optimizeCategories = async () => {
@@ -202,6 +299,22 @@ export default function App() {
     setRows((prev: Row[]) => prev.map((r: Row, idx: number) => idx === i ? { ...r, ...patch } : r));
   };
 
+  const resetScan = () => {
+    setScanState('idle');
+    setRows([]);
+    setEvents([]);
+    setProgress({ current: 0, total: 0 });
+    setBusy(false);
+    scanControlRef.current = {
+      shouldPause: false,
+      shouldStop: false,
+      currentFileIndex: 0,
+      processedFiles: [],
+      allFiles: [],
+      used: new Set<string>(),
+    };
+  };
+
   const toPath = (r: Row) => `${directory}/${r.category}/${r.name}${r.ext}`;
 
   return (
@@ -209,7 +322,31 @@ export default function App() {
       <h1>AI File Organizer</h1>
       <div className="row">
         <button onClick={pickDirectory} disabled={busy}>Pick Directory</button>
-        <button onClick={scan} disabled={busy || !directory}>{busy ? 'Scanning...' : 'Preview'}</button>
+        <button 
+          onClick={scan} 
+          disabled={busy || !directory || scanState === 'scanning' || scanState === 'paused'}
+        >
+          {scanState === 'scanning' ? 'Scanning...' : scanState === 'paused' ? 'Paused' : 'Preview'}
+        </button>
+        
+        {scanState === 'scanning' && (
+          <>
+            <button onClick={pauseScan} disabled={!busy}>Pause</button>
+            <button onClick={stopScan} disabled={!busy}>Stop</button>
+          </>
+        )}
+        
+        {scanState === 'paused' && (
+          <>
+            <button onClick={resumeScan}>Resume</button>
+            <button onClick={stopScan}>Stop</button>
+          </>
+        )}
+        
+        {(scanState === 'completed' || scanState === 'stopped') && (
+          <button onClick={resetScan}>New Scan</button>
+        )}
+        
         <span>{directory ? `Selected: ${directory}` : 'No directory selected'}</span>
       </div>
       <div className="row mt16">
@@ -217,9 +354,9 @@ export default function App() {
         <label>Model: <input aria-label="Model" placeholder="openai/gpt-4o" className="w220" value={model} onChange={e => setModel(e.target.value)} /></label>
       </div>
 
-      {busy && progress.total > 0 && (
+      {(busy || scanState !== 'idle') && progress.total > 0 && (
         <div className="mt16">
-          <h3>Progress</h3>
+          <h3>Progress - {scanState.charAt(0).toUpperCase() + scanState.slice(1)}</h3>
           <div className="progress-container">
             <div 
               className="progress-bar" 
@@ -228,6 +365,8 @@ export default function App() {
           </div>
           <div className="progress-text">
             {progress.current} / {progress.total} files processed ({Math.round((progress.current / progress.total) * 100)}%)
+            {scanState === 'stopped' && ` - Stopped at user request`}
+            {scanState === 'paused' && ` - Paused`}
           </div>
         </div>
       )}
