@@ -20,7 +20,18 @@ async fn read_directory(path: String) -> Result<Vec<String>, String> {
 #[command]
 async fn read_file_content(path: String) -> Result<String, String> {
     if path.ends_with(".pdf") {
-        pdf_extract::extract_text(&path).map_err(|e| e.to_string())
+        // Use a more robust approach for PDF extraction with error handling
+        match std::panic::catch_unwind(|| pdf_extract::extract_text(&path)) {
+            Ok(Ok(text)) => Ok(text),
+            Ok(Err(e)) => {
+                // If PDF extraction fails, return a descriptive error instead of panicking
+                Err(format!("Failed to extract text from PDF: {}. This PDF may have complex fonts or encoding issues.", e))
+            }
+            Err(_) => {
+                // If the library panics, catch it and return a user-friendly error
+                Err("Failed to extract text from PDF: The PDF contains unsupported fonts or encoding that cannot be processed.".to_string())
+            }
+        }
     } else {
         fs::read_to_string(&path).map_err(|e| e.to_string())
     }
