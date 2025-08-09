@@ -40,3 +40,57 @@ export async function classifyViaLMStudio(opts: {
     return m ? JSON.parse(m[0]) : { category_path: 'uncategorized', suggested_filename: originalName.replace(/\.[^/.]+$/, ''), confidence: 0 }
   }
 }
+
+export async function optimizeCategoriesViaLMStudio(opts: {
+  baseUrl: string,
+  model: string,
+  directoryTree: { [category: string]: string[] },
+}): Promise<{ optimizations: { from: string; to: string; reason: string }[] }> {
+  const { baseUrl, model, directoryTree } = opts;
+  
+  const treeText = Object.entries(directoryTree)
+    .map(([category, files]) => `${category}/ (${files.length} files)\n  - ${files.slice(0, 5).join('\n  - ')}${files.length > 5 ? `\n  - ... and ${files.length - 5} more` : ''}`)
+    .join('\n\n');
+
+  const promptTemplate = `You are a file organization optimizer. Analyze this directory structure and suggest optimizations to merge similar categories or reorganize files for better structure.
+
+Focus on:
+1. Merging categories with similar meanings (e.g., "finance" and "financial", "medical" and "health")
+2. Consolidating subcategories that are too granular
+3. Improving category naming consistency
+4. Reducing redundant categories
+
+Reply in strict JSON with key "optimizations" containing an array of objects with keys: "from" (current category), "to" (suggested category), "reason" (explanation).
+
+Current directory structure:
+${treeText}`;
+
+  const resp = await fetch(`${baseUrl.replace(/\/$/, '')}/v1/chat/completions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: 'system', content: 'Return only valid JSON (no markdown), with key "optimizations" containing an array of optimization suggestions.' },
+        { role: 'user', content: promptTemplate },
+      ],
+      temperature: 0.3,
+      max_tokens: -1,
+      stream: false,
+    }),
+  });
+
+  if (!resp.ok) {
+    throw new Error(`${resp.status} ${resp.statusText}`);
+  }
+  
+  const data = await resp.json();
+  const content = data?.choices?.[0]?.message?.content ?? '{}';
+  
+  try {
+    return JSON.parse(content);
+  } catch (e) {
+    const m = content.match(/\{[\s\S]*\}/);
+    return m ? JSON.parse(m[0]) : { optimizations: [] };
+  }
+}

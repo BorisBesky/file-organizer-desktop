@@ -45,19 +45,11 @@ fn pick_directory(app: AppHandle) {
     });
 }
 
-#[command]
-async fn organize_directory(path: String) -> Result<(), String> {
-    // TODO: Implement organization logic
-    println!("Organizing directory at: {}", path);
-    Ok(())
-}
-
 fn main() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             read_directory,
             pick_directory,
-            organize_directory,
             read_file_content,
             move_file
         ])

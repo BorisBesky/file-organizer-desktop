@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { classifyViaLMStudio } from './api';
+import { classifyViaLMStudio, optimizeCategoriesViaLMStudio } from './api';
 import { invoke } from '@tauri-apps/api/tauri';
 import { listen } from '@tauri-apps/api/event';
 
@@ -35,6 +35,7 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [events, setEvents] = useState<string[]>([]);
   const [rows, setRows] = useState<Row[]>([]);
+  const [progress, setProgress] = useState({ current: 0, total: 0 });
 
   useEffect(() => {
     const unlisten = listen<string>('directory-selected', (event) => {
@@ -60,13 +61,18 @@ export default function App() {
     setBusy(true);
     setEvents([]);
     setRows([]);
+    setProgress({ current: 0, total: 0 });
     const used = new Set<string>();
     const previews: any[] = [];
 
     const files: string[] = await invoke('read_directory', { path: directory });
+    const processableFiles = files.filter(f => !splitPath(f).name.startsWith('.'));
+    setProgress({ current: 0, total: processableFiles.length });
 
-    for (const f of files) {
-      if (splitPath(f).name.startsWith('.')) continue;
+    let currentIndex = 0;
+    for (const f of processableFiles) {
+      currentIndex++;
+      setProgress({ current: currentIndex, total: processableFiles.length });
       
       let text = '';
       let readable = false;
@@ -124,6 +130,54 @@ export default function App() {
       };
     });
     setRows(outRows);
+    setProgress({ current: 0, total: 0 });
+    setBusy(false);
+  };
+
+  const optimizeCategories = async () => {
+    if (!rows.length) return;
+    
+    setBusy(true);
+    setEvents((prev: string[]) => [...prev, 'Analyzing directory structure for optimizations...']);
+    
+    // Build directory tree from current rows
+    const directoryTree: { [category: string]: string[] } = {};
+    rows.forEach(row => {
+      if (!directoryTree[row.category]) {
+        directoryTree[row.category] = [];
+      }
+      directoryTree[row.category].push(`${row.name}${row.ext}`);
+    });
+    
+    try {
+      const result = await optimizeCategoriesViaLMStudio({
+        baseUrl: lmBase,
+        model,
+        directoryTree,
+      });
+      
+      if (result.optimizations && result.optimizations.length > 0) {
+        setEvents((prev: string[]) => [...prev, `Found ${result.optimizations.length} optimization suggestions:`]);
+        
+        // Apply optimizations to rows
+        const updatedRows = rows.map(row => {
+          const optimization = result.optimizations.find(opt => opt.from === row.category);
+          if (optimization) {
+            setEvents((prev: string[]) => [...prev, `  ${optimization.from} → ${optimization.to}: ${optimization.reason}`]);
+            return { ...row, category: optimization.to };
+          }
+          return row;
+        });
+        
+        setRows(updatedRows);
+        setEvents((prev: string[]) => [...prev, 'Applied category optimizations successfully.']);
+      } else {
+        setEvents((prev: string[]) => [...prev, 'No optimizations suggested - directory structure looks good!']);
+      }
+    } catch (e: any) {
+      setEvents((prev: string[]) => [...prev, `Failed to optimize categories: ${e?.message || String(e)}`]);
+    }
+    
     setBusy(false);
   };
 
@@ -152,23 +206,43 @@ export default function App() {
 
   return (
     <div className="container">
-      <h1>AI File Organizer (Desktop)</h1>
+      <h1>AI File Organizer</h1>
       <div className="row">
         <button onClick={pickDirectory} disabled={busy}>Pick Directory</button>
         <button onClick={scan} disabled={busy || !directory}>{busy ? 'Scanning...' : 'Preview'}</button>
         <span>{directory ? `Selected: ${directory}` : 'No directory selected'}</span>
       </div>
       <div className="row mt16">
-        <label>LM Studio base: <input aria-label="LM Studio base" className="w260" value={lmBase} onChange={e => setLmBase(e.target.value)} /></label>
-        <label>Model: <input aria-label="Model" className="w220" value={model} onChange={e => setModel(e.target.value)} /></label>
+        <label>LM Studio base: <input aria-label="LM Studio base" placeholder="http://localhost:1234/v1" className="w260" value={lmBase} onChange={e => setLmBase(e.target.value)} /></label>
+        <label>Model: <input aria-label="Model" placeholder="openai/gpt-4o" className="w220" value={model} onChange={e => setModel(e.target.value)} /></label>
       </div>
+
+      {busy && progress.total > 0 && (
+        <div className="mt16">
+          <h3>Progress</h3>
+          <div className="progress-container">
+            <div 
+              className="progress-bar" 
+              style={{ width: `${(progress.current / progress.total) * 100}%` }}
+            ></div>
+          </div>
+          <div className="progress-text">
+            {progress.current} / {progress.total} files processed ({Math.round((progress.current / progress.total) * 100)}%)
+          </div>
+        </div>
+      )}
 
       {!!events.length && (
         <div className="mt16">
           <h3>Status</h3>
-          <ul>
-            {events.map((e: string, i: number) => <li key={i} className="muted">{e}</li>)}
-          </ul>
+          <textarea
+            readOnly
+            rows={5}
+            value={events.join('\n')}
+            className="status-textarea"
+            aria-label="Status events log"
+            title="Status events log"
+          />
         </div>
       )}
 
@@ -187,8 +261,8 @@ export default function App() {
                   <tr key={i}>
                     <td><input aria-label={`Select ${r.src}`} type="checkbox" checked={!!r.enabled} onChange={e => updateRow(i, { enabled: e.target.checked })} /></td>
                     <td><code>{r.src}</code>{!r.enabled && <div className="muted">{r.reason || ''}</div>}</td>
-                    <td><input aria-label={`Category for ${r.src}`} type="text" value={r.category} onChange={e => updateRow(i, { category: e.target.value })} /></td>
-                    <td><input aria-label={`Name for ${r.src}`} type="text" value={r.name} onChange={e => updateRow(i, { name: e.target.value })} /></td>
+                    <td><input aria-label={`Category for ${r.src}`} type="text" value={r.category} placeholder="Category" onChange={e => updateRow(i, { category: e.target.value })} /></td>
+                    <td><input aria-label={`Name for ${r.src}`} type="text" value={r.name} placeholder="New filename" onChange={e => updateRow(i, { name: e.target.value })} /></td>
                     <td>{r.ext}</td>
                     <td>{toPath(r)}</td>
                   </tr>
@@ -197,13 +271,16 @@ export default function App() {
             </table>
           </div>
           <div className="mt8">
-            <button onClick={applyMoves}>Approve Selected</button>
+            <button onClick={optimizeCategories} disabled={busy}>
+              {busy ? 'Optimizing...' : 'Optimize Categories'}
+            </button>
+            <button onClick={applyMoves} disabled={busy}>Approve Selected</button>
           </div>
         </div>
       )}
 
       <p className="note">
-        Read, analyze, and suggest file organization structures.
+        AI file organization assistant.
       </p>
     </div>
   );
