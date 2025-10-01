@@ -4,7 +4,7 @@ on:
   push:
     # Build and release your app on every push to the `release` branch.
     branches:
-      - main
+      - release
   
   # Allow manual trigger from the GitHub Actions tab.
   workflow_dispatch:
