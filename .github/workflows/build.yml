@@ -1,0 +1,51 @@
+name: "Build Tauri App"
+
+on:
+  push:
+    # Build and release your app on every push to the `release` branch.
+    branches:
+      - main
+  
+  # Allow manual trigger from the GitHub Actions tab.
+  workflow_dispatch:
+
+env:
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+jobs:
+  publish-tauri:
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [macos-latest, ubuntu-22.04, windows-latest]
+    
+    runs-on: ${{ matrix.platform }}
+    permissions:
+      contents: write # Enables the action to create a GitHub release
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build artifacts
+        uses: swatinem/rust-cache@v2
+
+      - name: Install dependencies (npm)
+        run: npm install
+
+      - name: Install linux dependencies (optional)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.0-dev libappindicator3-dev
+
+      - name: Build and Publish with Tauri Action
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
