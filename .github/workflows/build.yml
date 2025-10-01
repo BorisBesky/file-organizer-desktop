@@ -2,12 +2,19 @@ name: "Build Tauri App"
 
 on:
   push:
-    # Build and release your app on every push to the `release` branch.
-    branches:
-      - release
+    # Trigger the workflow only when a new Git tag matching "app-v*" is pushed
+    tags:
+      - 'app-v*'
   
   # Allow manual trigger from the GitHub Actions tab.
   workflow_dispatch:
+    inputs:
+      tagName:
+        description: 'Git tag for the release (e.g. v1.0.0)'
+        required: true
+      releaseName:
+        description: 'Name of the release'
+        required: true
 
 env:
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
