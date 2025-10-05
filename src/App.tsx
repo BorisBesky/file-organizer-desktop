@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react';
-import { classifyViaLMStudio, optimizeCategoriesViaLMStudio } from './api';
+import { classifyViaLLM, optimizeCategoriesViaLLM, LLMConfig, DEFAULT_CONFIGS } from './api';
 import { invoke } from '@tauri-apps/api/tauri';
 import { listen } from '@tauri-apps/api/event';
 import { ScanState } from './types';
+import { LLMConfigPanel } from './components';
 
 function sanitizeFilename(name: string) {
   let out = name.trim().replace(/[\n\r]/g, ' ');
@@ -30,8 +31,11 @@ function splitPath(p: string) {
 type Row = { src: string; readable: boolean; reason?: string; category: string; name: string; ext: string; enabled: boolean; dst?: any };
 
 export default function App() {
-  const [lmBase, setLmBase] = useState('/lm');
-  const [model, setModel] = useState('openai/gpt-oss-20b');
+  const [llmConfig, setLlmConfig] = useState<LLMConfig>({
+    provider: 'lmstudio',
+    baseUrl: 'http://localhost:1234',
+    model: 'local-model',
+  });
   const [directory, setDirectory] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [events, setEvents] = useState<string[]>([]);
@@ -161,7 +165,7 @@ export default function App() {
         setEvents((prev: string[]) => [...prev, `Classifying ${f}`]);
         let result;
         try {
-          result = await classifyViaLMStudio({ baseUrl: lmBase, model, text, originalName: splitPath(f).name, categoriesHint });
+          result = await classifyViaLLM({ config: llmConfig, text, originalName: splitPath(f).name, categoriesHint });
         } catch (e: any) {
           result = { category_path: 'uncategorized', suggested_filename: f.replace(/\.[^/.]+$/, ''), confidence: 0, raw: { error: e?.message || String(e) } };
         }
@@ -247,9 +251,8 @@ export default function App() {
     });
     
     try {
-      const result = await optimizeCategoriesViaLMStudio({
-        baseUrl: lmBase,
-        model,
+      const result = await optimizeCategoriesViaLLM({
+        config: llmConfig,
         directoryTree,
       });
       
@@ -258,7 +261,7 @@ export default function App() {
         
         // Apply optimizations to rows
         const updatedRows = rows.map(row => {
-          const optimization = result.optimizations.find(opt => opt.from === row.category);
+          const optimization = result.optimizations.find((opt: { from: string; to: string; reason: string }) => opt.from === row.category);
           if (optimization) {
             setEvents((prev: string[]) => [...prev, `  ${optimization.from} → ${optimization.to}: ${optimization.reason}`]);
             return { ...row, category: optimization.to };
@@ -317,9 +320,31 @@ export default function App() {
 
   const toPath = (r: Row) => `${directory}/${r.category}/${r.name}${r.ext}`;
 
+  const testLLMConnection = async () => {
+    // Simple test by sending a minimal classification request
+    const testResult = await classifyViaLLM({
+      config: llmConfig,
+      text: 'Test document for connection verification',
+      originalName: 'test.txt',
+      categoriesHint: [],
+    });
+    if (!testResult || !testResult.category_path) {
+      throw new Error('Invalid response from LLM provider');
+    }
+  };
+
   return (
     <div className="container">
       <h1>AI File Organizer</h1>
+      
+      {/* LLM Configuration Panel */}
+      <LLMConfigPanel
+        config={llmConfig}
+        onChange={setLlmConfig}
+        onTest={testLLMConnection}
+        disabled={busy}
+      />
+      
       <div className="row">
         <button onClick={pickDirectory} disabled={busy}>Pick Directory</button>
         <button 
@@ -352,10 +377,6 @@ export default function App() {
         )}
         
         <span>{directory ? `Selected: ${directory}` : 'No directory selected'}</span>
-      </div>
-      <div className="row mt16">
-        <label>LM Studio base: <input aria-label="LM Studio base" placeholder="http://localhost:1234/v1" className="w260" value={lmBase} onChange={e => setLmBase(e.target.value)} /></label>
-        <label>Model: <input aria-label="Model" placeholder="openai/gpt-4o" className="w220" value={model} onChange={e => setModel(e.target.value)} /></label>
       </div>
 
       {(busy || scanState !== 'idle') && progress.total > 0 && (

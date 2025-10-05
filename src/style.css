@@ -75,3 +75,218 @@ th {
   border: 1px solid #ddd;
   border-radius: 4px;
 }
+
+/* LLM Config Panel Styles */
+.llm-config-panel {
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 12px;
+  background: #fafafa;
+  margin-bottom: 16px;
+}
+
+.llm-config-header {
+  margin-bottom: 0;
+}
+
+.llm-config-toggle {
+  width: 100%;
+  background: transparent;
+  border: none;
+  padding: 8px 12px;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #333;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+}
+
+.llm-config-toggle:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.llm-config-toggle:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.toggle-icon {
+  font-size: 12px;
+  width: 16px;
+  display: inline-block;
+}
+
+.llm-config-content {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #ddd;
+}
+
+.config-section {
+  margin-bottom: 16px;
+}
+
+.config-label {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 6px;
+  color: #333;
+}
+
+.config-input,
+.config-textarea {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 14px;
+  margin-top: 4px;
+  font-family: inherit;
+}
+
+.config-input:focus,
+.config-textarea:focus {
+  outline: none;
+  border-color: #4CAF50;
+  box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.1);
+}
+
+.config-input:disabled,
+.config-textarea:disabled {
+  background: #f5f5f5;
+  cursor: not-allowed;
+}
+
+.config-hint {
+  font-size: 12px;
+  color: #666;
+  margin-top: 4px;
+  font-style: italic;
+}
+
+.provider-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.provider-card {
+  background: white;
+  border: 2px solid #ddd;
+  border-radius: 8px;
+  padding: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  text-align: left;
+}
+
+.provider-card:hover:not(:disabled) {
+  border-color: #4CAF50;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.provider-card.selected {
+  border-color: #4CAF50;
+  background: #f0f9f0;
+}
+
+.provider-card:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.provider-name {
+  font-weight: 600;
+  font-size: 14px;
+  margin-bottom: 4px;
+  color: #333;
+}
+
+.provider-desc {
+  font-size: 12px;
+  color: #666;
+  line-height: 1.4;
+}
+
+.provider-badge {
+  display: inline-block;
+  background: #FFA726;
+  color: white;
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  margin-top: 6px;
+  font-weight: 500;
+}
+
+.config-advanced {
+  margin-top: 16px;
+  padding: 12px;
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.config-advanced summary {
+  cursor: pointer;
+  font-weight: 500;
+  color: #666;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.config-advanced summary:hover {
+  color: #333;
+}
+
+.test-button {
+  background: #2196F3;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.test-button:hover:not(:disabled) {
+  background: #1976D2;
+}
+
+.test-button:disabled {
+  background: #BDBDBD;
+  cursor: not-allowed;
+}
+
+.test-message {
+  margin-top: 8px;
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-size: 13px;
+}
+
+.test-message.success {
+  background: #E8F5E9;
+  color: #2E7D32;
+  border: 1px solid #81C784;
+}
+
+.test-message.error {
+  background: #FFEBEE;
+  color: #C62828;
+  border: 1px solid #E57373;
+}
+
+.test-message.testing {
+  background: #E3F2FD;
+  color: #1565C0;
+  border: 1px solid #64B5F6;
+}
