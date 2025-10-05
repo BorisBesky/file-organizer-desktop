@@ -43,6 +43,65 @@ file-organizer-desktop
    npm run dev
    ```
 
+## Building the Application
+
+### Prerequisites for Building
+
+Before building the Tauri application, ensure you have the following installed:
+
+- **Node.js** (v16 or higher)
+- **Rust** (latest stable version)
+- **Platform-specific dependencies:**
+  - **macOS**: Xcode Command Line Tools
+  - **Linux**: See [Tauri prerequisites for Linux](https://tauri.app/v1/guides/getting-started/prerequisites#setting-up-linux)
+  - **Windows**: Microsoft Visual Studio C++ Build Tools
+
+### Development Build
+
+To run the application in development mode with hot-reloading:
+
+```bash
+npm run tauri dev
+```
+
+### Production Build
+
+To create an optimized production build:
+
+```bash
+npm run tauri build
+```
+
+This will create platform-specific installers in the `src-tauri/target/release/bundle/` directory:
+
+- **macOS**: `.app` bundle and `.dmg` installer in `bundle/macos/`
+- **Windows**: `.msi` installer in `bundle/msi/` and `.exe` in `bundle/nsis/`
+- **Linux**: `.deb`, `.AppImage`, or other formats in `bundle/deb/`, `bundle/appimage/`, etc.
+
+### Build Output Locations
+
+After building, you can find the compiled application at:
+
+- **Development**: `src-tauri/target/debug/`
+- **Production**: `src-tauri/target/release/`
+- **Installers**: `src-tauri/target/release/bundle/`
+
+### Customizing the Build
+
+You can customize the build configuration by editing:
+- `src-tauri/tauri.conf.json` - Tauri app configuration (app name, version, window settings, etc.)
+- `src-tauri/Cargo.toml` - Rust dependencies and metadata
+- `vite.config.ts` - Frontend build configuration
+
+### Code Signing (macOS/Windows)
+
+For distribution, you'll need to sign your application:
+
+- **macOS**: Configure your Apple Developer certificate in `tauri.conf.json` under `tauri.bundle.macOS`
+- **Windows**: Configure code signing certificate in `tauri.conf.json` under `tauri.bundle.windows`
+
+Refer to the [Tauri documentation](https://tauri.app/v1/guides/distribution/sign-macos) for detailed signing instructions.
+
 ## Usage
 
 ### Basic Operation
