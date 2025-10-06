@@ -20,9 +20,22 @@ td {
   border: none;
   padding: 8px 12px;
   text-align: left;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+}
+
+/* Make Source and Proposed To columns wrap */
+td:nth-child(2),
+td:nth-child(6) {
+  white-space: normal;
+  word-break: break-all;
+  max-width: 300px;
+  font-size: 11px;
+}
+
+/* Category and Filename columns should not overflow */
+td:nth-child(3),
+td:nth-child(4) {
+  min-width: 150px;
+  max-width: 250px;
 }
 
 th {
@@ -65,6 +78,7 @@ td input[type="text"] {
   border-radius: 4px;
   font-size: 12px;
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+  box-sizing: border-box;
 }
 
 td input[type="text"]:focus {
@@ -99,6 +113,62 @@ td input[type="checkbox"] {
 }
 .mt8 {
   margin-top: 8px;
+}
+
+/* Collapsible Section */
+.collapsible-section {
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  padding: 16px;
+  background: #f5f5f7;
+}
+
+.section-container {
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  padding: 16px;
+  background: #f5f5f7;
+}
+
+.section-container h3 {
+  margin-top: 0;
+  margin-bottom: 16px;
+}
+
+.section-toggle {
+  width: 100%;
+  background: transparent;
+  border: none;
+  padding: 0;
+  font-size: 15px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #000;
+  border-radius: 6px;
+  transition: background-color 0.15s;
+  height: auto;
+  margin-bottom: 12px;
+}
+
+.section-toggle:hover {
+  opacity: 0.7;
+}
+
+.section-toggle h3 {
+  margin: 0;
+  font-size: 17px;
+}
+
+/* Button row for action buttons */
+.button-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
 }
 .scroll-x {
   overflow-x: auto;
@@ -285,12 +355,14 @@ label input[type="checkbox"] {
   font-family: 'SF Mono', Monaco, Menlo, monospace;
   font-size: 11px;
   padding: 12px;
-  border: 1px solid #e5e5e5;
+  border: 1px solid #d1d1d6;
   border-radius: 6px;
-  background: #f5f5f7;
+  background: white;
   color: #000;
   line-height: 1.6;
   min-height: 120px;
+  box-sizing: border-box;
+  margin-top: 0;
 }
 
 .status-textarea::-webkit-scrollbar {
@@ -389,6 +461,7 @@ label input[type="checkbox"] {
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
   background: white;
   color: #000;
+  box-sizing: border-box;
 }
 
 .config-input:focus,
@@ -506,6 +579,7 @@ label input[type="checkbox"] {
   font-weight: 500;
   cursor: pointer;
   transition: all 0.15s;
+  margin-top: 16px;
 }
 
 .test-button:hover:not(:disabled) {

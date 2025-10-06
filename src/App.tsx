@@ -44,6 +44,7 @@ export default function App() {
   const [events, setEvents] = useState<string[]>([]);
   const [rows, setRows] = useState<Row[]>([]);
   const [progress, setProgress] = useState({ current: 0, total: 0 });
+  const [statusExpanded, setStatusExpanded] = useState(true);
   
   // Scan control state
   const [scanState, setScanState] = useState<ScanState>('idle');
@@ -418,21 +419,30 @@ export default function App() {
       )}
 
       {!!events.length && (
-        <div className="mt16">
-          <h3>Status</h3>
-          <textarea
-            readOnly
-            rows={5}
-            value={events.join('\n')}
-            className="status-textarea"
-            aria-label="Status events log"
-            title="Status events log"
-          />
+        <div className="collapsible-section mt16">
+          <button
+            type="button"
+            className="section-toggle"
+            onClick={() => setStatusExpanded(!statusExpanded)}
+          >
+            <span className="toggle-icon">{statusExpanded ? '▼' : '▶'}</span>
+            <h3>Status</h3>
+          </button>
+          {statusExpanded && (
+            <textarea
+              readOnly
+              rows={5}
+              value={events.join('\n')}
+              className="status-textarea"
+              aria-label="Status events log"
+              title="Status events log"
+            />
+          )}
         </div>
       )}
 
       {!!rows.length && (
-        <div className="mt16">
+        <div className="section-container mt16">
           <h3>Review & Edit</h3>
           <div className="scroll-x">
             <table>
@@ -455,7 +465,7 @@ export default function App() {
               </tbody>
             </table>
           </div>
-          <div className="mt8">
+          <div className="button-row mt16">
             <button className="secondary" onClick={optimizeCategories} disabled={busy}>
               {busy ? 'Optimizing...' : 'Optimize Categories'}
             </button>
