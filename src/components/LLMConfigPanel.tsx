@@ -133,26 +133,25 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled }: L
         <div className="llm-config-content">
           {/* Provider Selection */}
           <div className="config-section">
-            <label className="config-label">Select Provider</label>
-            <div className="provider-grid">
-              {(Object.keys(PROVIDER_INFO) as LLMProviderType[]).map((provider) => {
-                const info = PROVIDER_INFO[provider];
-                const isSelected = config.provider === provider;
-                return (
-                  <button
-                    key={provider}
-                    type="button"
-                    className={`provider-card ${isSelected ? 'selected' : ''}`}
-                    onClick={() => handleProviderChange(provider)}
-                    disabled={disabled}
-                  >
-                    <div className="provider-name">{info.name}</div>
-                    <div className="provider-desc">{info.description}</div>
-                    {info.requiresApiKey && <div className="provider-badge">API Key Required</div>}
-                  </button>
-                );
-              })}
-            </div>
+            <label className="config-label">
+              Provider
+              <select
+                className="config-input"
+                value={config.provider}
+                onChange={(e) => handleProviderChange(e.target.value as LLMProviderType)}
+                disabled={disabled}
+              >
+                {(Object.keys(PROVIDER_INFO) as LLMProviderType[]).map((provider) => {
+                  const info = PROVIDER_INFO[provider];
+                  return (
+                    <option key={provider} value={provider}>
+                      {info.name}
+                    </option>
+                  );
+                })}
+              </select>
+            </label>
+            <div className="config-hint">{currentProviderInfo.description}</div>
           </div>
 
           {/* Configuration Fields */}

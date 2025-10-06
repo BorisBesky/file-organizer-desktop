@@ -48,6 +48,49 @@ export default function App() {
   const [helpOpen, setHelpOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   
+  // Column widths (in pixels)
+  const [columnWidths, setColumnWidths] = useState({
+    apply: 60,
+    source: 300,
+    category: 200,
+    filename: 200,
+    ext: 60,
+    proposedTo: 300,
+  });
+  
+  const resizingColumn = useRef<string | null>(null);
+  const startX = useRef(0);
+  const startWidth = useRef(0);
+  
+  // Handle column resize
+  const handleResizeStart = (e: React.MouseEvent, columnKey: string) => {
+    e.preventDefault();
+    resizingColumn.current = columnKey;
+    startX.current = e.clientX;
+    startWidth.current = columnWidths[columnKey as keyof typeof columnWidths];
+    
+    document.addEventListener('mousemove', handleResizeMove);
+    document.addEventListener('mouseup', handleResizeEnd);
+  };
+  
+  const handleResizeMove = (e: MouseEvent) => {
+    if (!resizingColumn.current) return;
+    
+    const diff = e.clientX - startX.current;
+    const newWidth = Math.max(50, startWidth.current + diff);
+    
+    setColumnWidths(prev => ({
+      ...prev,
+      [resizingColumn.current!]: newWidth,
+    }));
+  };
+  
+  const handleResizeEnd = () => {
+    resizingColumn.current = null;
+    document.removeEventListener('mousemove', handleResizeMove);
+    document.removeEventListener('mouseup', handleResizeEnd);
+  };
+  
   // Scan control state
   const [scanState, setScanState] = useState<ScanState>('idle');
   const scanControlRef = useRef({
@@ -338,6 +381,15 @@ export default function App() {
   };
 
   const toPath = (r: Row) => `${directory}/${r.category}/${r.name}${r.ext}`;
+  
+  // Get relative path from the selected directory
+  const getRelativePath = (fullPath: string) => {
+    if (!directory) return fullPath;
+    const dirWithSlash = directory.endsWith('/') ? directory : directory + '/';
+    return fullPath.startsWith(dirWithSlash) ? fullPath.slice(dirWithSlash.length) : fullPath;
+  };
+  
+  const getRelativeToPath = (r: Row) => `${r.category}/${r.name}${r.ext}`;
 
   const testLLMConnection = async () => {
     // Simple test by sending a minimal classification request
@@ -359,139 +411,193 @@ export default function App() {
   };
 
   return (
-    <div className="container">
-      <h1>AI File Organizer</h1>
-      
-      {/* LLM Configuration Panel */}
-      <LLMConfigPanel
-        config={llmConfig}
-        onChange={setLlmConfig}
-        onTest={testLLMConnection}
-        disabled={busy}
-      />
-      
-      <div className="row">
-        <button onClick={pickDirectory} disabled={busy}>Pick Directory</button>
-        <button 
-          onClick={scan} 
-          disabled={busy || !directory || scanState === 'scanning' || scanState === 'paused'}
-        >
-          {scanState === 'scanning' ? 'Scanning...' : scanState === 'paused' ? 'Paused' : 'Scan'}
-        </button>
-        
-        {scanState === 'scanning' && (
-          <>
-            <button className="warning" onClick={pauseScan} disabled={!busy}>Pause</button>
-            <button className="danger" onClick={stopScan} disabled={!busy}>Stop</button>
-          </>
-        )}
-        
-        {scanState === 'paused' && (
-          <>
-            <button onClick={resumeScan}>Resume</button>
-            <button className="danger" onClick={stopScan}>Stop</button>
-          </>
-        )}
-        
-        {scanState === 'stopped' && (
-          <button onClick={resumeScan}>Continue Scan</button>
-        )}
-        
-        {scanState === 'completed' && (
-          <button className="secondary" onClick={resetScan}>New Scan</button>
-        )}
-        
-        <span>{directory ? `Selected: ${directory}` : 'No directory selected'}</span>
-      </div>
-
-      <div className="row">
-        <label>
-          <input 
-            type="checkbox" 
-            checked={includeSubdirectories} 
-            onChange={e => setIncludeSubdirectories(e.target.checked)}
-            disabled={busy || scanState === 'scanning' || scanState === 'paused'}
-          />
-          Include subdirectories
-        </label>
-      </div>
-
-      {(busy || scanState !== 'idle') && progress.total > 0 && (
-        <div className="mt16">
-          <h3>Progress - {scanState.charAt(0).toUpperCase() + scanState.slice(1)}</h3>
-          <div className="progress-container">
-            <div 
-              className="progress-bar" 
-              style={{ width: `${(progress.current / progress.total) * 100}%` }}
-            ></div>
+    <div className="app-layout">
+      {/* Progress/Status Header */}
+      <div className="app-header">
+        {(busy || scanState !== 'idle') && progress.total > 0 && (
+          <div className="header-progress">
+            <div className="progress-label">
+              Progress - {scanState.charAt(0).toUpperCase() + scanState.slice(1)}
+            </div>
+            <div className="progress-container">
+              <div 
+                className="progress-bar"
+                style={{ width: `${(progress.current / progress.total) * 100}%` }}
+              />
+            </div>
+            <div className="progress-text">
+              {progress.current} / {progress.total} files ({Math.round((progress.current / progress.total) * 100)}%)
+              {scanState === 'stopped' && ` - Stopped`}
+              {scanState === 'paused' && ` - Paused`}
+            </div>
           </div>
-          <div className="progress-text">
-            {progress.current} / {progress.total} files processed ({Math.round((progress.current / progress.total) * 100)}%)
-            {scanState === 'stopped' && ` - Stopped at user request`}
-            {scanState === 'paused' && ` - Paused`}
-          </div>
-        </div>
-      )}
+        )}
 
-      {!!events.length && (
-        <div className="collapsible-section mt16">
-          <button
-            type="button"
-            className="section-toggle"
-            onClick={() => setStatusExpanded(!statusExpanded)}
-          >
-            <span className="toggle-icon">{statusExpanded ? '▼' : '▶'}</span>
-            <h3>Status</h3>
-          </button>
-          {statusExpanded && (
-            <textarea
-              readOnly
-              rows={5}
-              value={events.join('\n')}
-              className="status-textarea"
-              aria-label="Status events log"
-              title="Status events log"
-            />
-          )}
-        </div>
-      )}
-
-      {!!rows.length && (
-        <div className="section-container mt16">
-          <h3>Review & Edit</h3>
-          <div className="scroll-x">
-            <table>
-              <thead>
-                <tr>
-                  <th>Apply</th><th>Source</th><th>Category</th><th>Filename</th><th>Ext</th><th>Proposed To</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((r: Row, i: number) => (
-                  <tr key={i}>
-                    <td><input aria-label={`Select ${r.src}`} type="checkbox" checked={!!r.enabled} onChange={e => updateRow(i, { enabled: e.target.checked })} /></td>
-                    <td><code>{r.src}</code>{!r.enabled && <div className="muted">{r.reason || ''}</div>}</td>
-                    <td><input aria-label={`Category for ${r.src}`} type="text" value={r.category} placeholder="Category" onChange={e => updateRow(i, { category: e.target.value })} /></td>
-                    <td><input aria-label={`Name for ${r.src}`} type="text" value={r.name} placeholder="New filename" onChange={e => updateRow(i, { name: e.target.value })} /></td>
-                    <td>{r.ext}</td>
-                    <td>{toPath(r)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <div className="button-row mt16">
-            <button className="secondary" onClick={optimizeCategories} disabled={busy}>
-              {busy ? 'Optimizing...' : 'Optimize Categories'}
+        {!!events.length && (
+          <div className="header-status">
+            <button
+              type="button"
+              className="status-toggle"
+              onClick={() => setStatusExpanded(!statusExpanded)}
+            >
+              <span className="toggle-icon">{statusExpanded ? '▼' : '▶'}</span>
+              <span>Status Log</span>
             </button>
-            <button onClick={applyMoves} disabled={busy}>Approve Selected</button>
+            {statusExpanded && (
+              <textarea
+                readOnly
+                rows={4}
+                value={events.join('\n')}
+                className="status-textarea"
+                aria-label="Status events log"
+                title="Status events log"
+              />
+            )}
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
-            <p className="note">
-        AI file organization assistant.
-      </p>
+      {/* Main Layout: Sidebar + Content */}
+      <div className="app-main">
+        {/* Left Sidebar */}
+        <aside className="app-sidebar">
+          {/* LLM Configuration */}
+          <LLMConfigPanel
+            config={llmConfig}
+            onChange={setLlmConfig}
+            onTest={testLLMConnection}
+            disabled={busy}
+          />
+
+          {/* Directory Picker Section */}
+          <div className="sidebar-section">
+            <h3>Directory</h3>
+            <button onClick={pickDirectory} disabled={busy} className="w-full">
+              Pick Directory
+            </button>
+            {directory && (
+              <div className="directory-display">{directory}</div>
+            )}
+            <label className="mt8">
+              <input 
+                type="checkbox" 
+                checked={includeSubdirectories} 
+                onChange={e => setIncludeSubdirectories(e.target.checked)}
+                disabled={busy || scanState === 'scanning' || scanState === 'paused'}
+              />
+              Include subdirectories
+            </label>
+          </div>
+
+          {/* Scan Controls Section */}
+          <div className="sidebar-section">
+            <h3>Scan</h3>
+            <div className="button-column">
+              <button 
+                onClick={scan} 
+                disabled={busy || !directory || scanState === 'scanning' || scanState === 'paused'}
+                className="w-full"
+              >
+                {scanState === 'scanning' ? 'Scanning...' : scanState === 'paused' ? 'Paused' : 'Start Scan'}
+              </button>
+              
+              {scanState === 'scanning' && (
+                <>
+                  <button className="warning w-full" onClick={pauseScan} disabled={!busy}>Pause</button>
+                  <button className="danger w-full" onClick={stopScan} disabled={!busy}>Stop</button>
+                </>
+              )}
+              
+              {scanState === 'paused' && (
+                <>
+                  <button className="w-full" onClick={resumeScan}>Resume</button>
+                  <button className="danger w-full" onClick={stopScan}>Stop</button>
+                </>
+              )}
+              
+              {scanState === 'stopped' && (
+                <button className="w-full" onClick={resumeScan}>Continue Scan</button>
+              )}
+              
+              {scanState === 'completed' && (
+                <button className="secondary w-full" onClick={resetScan}>New Scan</button>
+              )}
+            </div>
+          </div>
+        </aside>
+
+        {/* Main Content Area */}
+        <main className="app-content">
+          {!!rows.length ? (
+            <div className="content-section">
+              <div className="content-header">
+                <h2>Review & Edit Proposals</h2>
+                <div className="button-row">
+                  <button className="secondary" onClick={optimizeCategories} disabled={busy}>
+                    {busy ? 'Optimizing...' : 'Optimize Categories'}
+                  </button>
+                  <button onClick={applyMoves} disabled={busy}>Approve Selected</button>
+                </div>
+              </div>
+              <div className="scroll-x">
+                <table className="resizable-table">
+                  <colgroup>
+                    <col style={{ width: `${columnWidths.apply}px` }} />
+                    <col style={{ width: `${columnWidths.source}px` }} />
+                    <col style={{ width: `${columnWidths.category}px` }} />
+                    <col style={{ width: `${columnWidths.filename}px` }} />
+                    <col style={{ width: `${columnWidths.ext}px` }} />
+                    <col style={{ width: `${columnWidths.proposedTo}px` }} />
+                  </colgroup>
+                  <thead>
+                    <tr>
+                      <th>
+                        Apply
+                        <div className="resize-handle" onMouseDown={(e) => handleResizeStart(e, 'apply')} />
+                      </th>
+                      <th>
+                        Source
+                        <div className="resize-handle" onMouseDown={(e) => handleResizeStart(e, 'source')} />
+                      </th>
+                      <th>
+                        Category
+                        <div className="resize-handle" onMouseDown={(e) => handleResizeStart(e, 'category')} />
+                      </th>
+                      <th>
+                        Filename
+                        <div className="resize-handle" onMouseDown={(e) => handleResizeStart(e, 'filename')} />
+                      </th>
+                      <th>
+                        Ext
+                        <div className="resize-handle" onMouseDown={(e) => handleResizeStart(e, 'ext')} />
+                      </th>
+                      <th>
+                        Proposed To
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((r: Row, i: number) => (
+                      <tr key={i}>
+                        <td><input aria-label={`Select ${r.src}`} type="checkbox" checked={!!r.enabled} onChange={e => updateRow(i, { enabled: e.target.checked })} /></td>
+                        <td><code>{getRelativePath(r.src)}</code>{!r.enabled && <div className="muted">{r.reason || ''}</div>}</td>
+                        <td><input aria-label={`Category for ${r.src}`} type="text" value={r.category} placeholder="Category" onChange={e => updateRow(i, { category: e.target.value })} /></td>
+                        <td><input aria-label={`Name for ${r.src}`} type="text" value={r.name} placeholder="New filename" onChange={e => updateRow(i, { name: e.target.value })} /></td>
+                        <td>{r.ext}</td>
+                        <td>{getRelativeToPath(r)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : (
+            <div className="content-empty">
+              <p>Select a directory and start a scan to organize your files.</p>
+            </div>
+          )}
+        </main>
+      </div>
 
       {/* Help and About Dialogs */}
       <HelpDialog isOpen={helpOpen} onClose={() => setHelpOpen(false)} />

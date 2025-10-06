@@ -7,12 +7,179 @@ body {
   font-size: 13px;
   line-height: 1.5;
 }
+
+/* App Layout - Two column with header */
+.app-layout {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+.app-header {
+  background: #f5f5f7;
+  border-bottom: 1px solid #e5e5e5;
+  padding: 12px 16px;
+  flex-shrink: 0;
+}
+
+.header-progress {
+  margin-bottom: 8px;
+}
+
+.progress-label {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 6px;
+  color: #000;
+}
+
+.header-status {
+  margin-top: 12px;
+}
+
+.status-toggle {
+  background: transparent;
+  border: none;
+  padding: 4px 0;
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  color: #000;
+  height: auto;
+}
+
+.status-toggle:hover {
+  opacity: 0.7;
+}
+
+.app-main {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.app-sidebar {
+  width: 320px;
+  background: #fafafa;
+  border-right: 1px solid #e5e5e5;
+  overflow-y: auto;
+  padding: 16px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.app-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px;
+  background: #ffffff;
+}
+
+.sidebar-section {
+  background: white;
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.sidebar-section h3 {
+  margin: 0 0 12px 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.button-column {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.w-full {
+  width: 100%;
+}
+
+.directory-display {
+  margin-top: 8px;
+  padding: 8px;
+  background: #f5f5f7;
+  border-radius: 4px;
+  font-size: 11px;
+  word-break: break-all;
+  color: #6e6e73;
+}
+
+.content-section {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.content-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.content-header h2 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.content-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #6e6e73;
+  font-size: 15px;
+}
+
+.content-empty p {
+  text-align: center;
+  max-width: 400px;
+}
+
 table {
   width: 100%;
   border-collapse: collapse;
-  table-layout: auto;
+  table-layout: fixed;
   min-width: 100%;
   font-size: 12px;
+}
+
+.resizable-table th {
+  position: relative;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.resize-handle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 8px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 1;
+  background: transparent;
+}
+
+.resize-handle:hover {
+  background: rgba(0, 122, 255, 0.2);
+}
+
+.resize-handle:active {
+  background: rgba(0, 122, 255, 0.4);
 }
 
 th,
@@ -20,6 +187,8 @@ td {
   border: none;
   padding: 8px 12px;
   text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Make Source and Proposed To columns wrap */
@@ -27,15 +196,7 @@ td:nth-child(2),
 td:nth-child(6) {
   white-space: normal;
   word-break: break-all;
-  max-width: 300px;
   font-size: 11px;
-}
-
-/* Category and Filename columns should not overflow */
-td:nth-child(3),
-td:nth-child(4) {
-  min-width: 150px;
-  max-width: 250px;
 }
 
 th {
