@@ -63,7 +63,6 @@ body {
 }
 
 .app-sidebar {
-  width: 320px;
   background: #fafafa;
   border-right: 1px solid #e5e5e5;
   overflow-y: auto;
@@ -72,6 +71,24 @@ body {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  position: relative;
+}
+
+.sidebar-resize-handle {
+  width: 4px;
+  cursor: col-resize;
+  background: transparent;
+  position: relative;
+  flex-shrink: 0;
+  transition: background-color 0.15s;
+}
+
+.sidebar-resize-handle:hover {
+  background: rgba(0, 122, 255, 0.3);
+}
+
+.sidebar-resize-handle:active {
+  background: rgba(0, 122, 255, 0.5);
 }
 
 .app-content {
@@ -774,25 +791,40 @@ label input[type="checkbox"] {
   align-self: flex-start;
 }
 
+.advanced-settings-toggle {
+  background: transparent;
+  border: none;
+  padding: 6px 8px;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #6e6e73;
+  border-radius: 6px;
+  transition: all 0.15s;
+  height: auto;
+  width: 100%;
+}
+
+.advanced-settings-toggle:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.04);
+  color: #000;
+}
+
+.advanced-settings-toggle:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 .config-advanced {
-  margin-top: 16px;
+  margin-top: 0;
   padding: 16px;
   background: white;
   border: 1px solid #e5e5e5;
   border-radius: 6px;
-}
-
-.config-advanced summary {
-  cursor: pointer;
-  font-weight: 500;
-  color: #6e6e73;
-  font-size: 13px;
-  -webkit-user-select: none;
-  user-select: none;
-}
-
-.config-advanced summary:hover {
-  color: #000;
 }
 
 .test-button {

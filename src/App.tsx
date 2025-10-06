@@ -48,6 +48,10 @@ export default function App() {
   const [helpOpen, setHelpOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   
+  // Sidebar width
+  const [sidebarWidth, setSidebarWidth] = useState(320);
+  const resizingSidebar = useRef(false);
+  
   // Column widths (in pixels)
   const [columnWidths, setColumnWidths] = useState({
     apply: 60,
@@ -89,6 +93,26 @@ export default function App() {
     resizingColumn.current = null;
     document.removeEventListener('mousemove', handleResizeMove);
     document.removeEventListener('mouseup', handleResizeEnd);
+  };
+  
+  // Handle sidebar resize
+  const handleSidebarResizeStart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    resizingSidebar.current = true;
+    document.addEventListener('mousemove', handleSidebarResizeMove);
+    document.addEventListener('mouseup', handleSidebarResizeEnd);
+  };
+  
+  const handleSidebarResizeMove = (e: MouseEvent) => {
+    if (!resizingSidebar.current) return;
+    const newWidth = Math.max(250, Math.min(600, e.clientX));
+    setSidebarWidth(newWidth);
+  };
+  
+  const handleSidebarResizeEnd = () => {
+    resizingSidebar.current = false;
+    document.removeEventListener('mousemove', handleSidebarResizeMove);
+    document.removeEventListener('mouseup', handleSidebarResizeEnd);
   };
   
   // Scan control state
@@ -479,7 +503,7 @@ export default function App() {
       {/* Main Layout: Sidebar + Content */}
       <div className="app-main">
         {/* Left Sidebar */}
-        <aside className="app-sidebar">
+        <aside className="app-sidebar" style={{ width: `${sidebarWidth}px` }}>
           {/* LLM Configuration */}
           <LLMConfigPanel
             config={llmConfig}
@@ -544,6 +568,9 @@ export default function App() {
             </div>
           </div>
         </aside>
+        
+        {/* Sidebar Resize Handle */}
+        <div className="sidebar-resize-handle" onMouseDown={handleSidebarResizeStart} />
 
         {/* Main Content Area */}
         <main className="app-content">

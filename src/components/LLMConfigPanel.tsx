@@ -48,6 +48,7 @@ const PROVIDER_INFO: Record<LLMProviderType, { name: string; description: string
 
 export default function LLMConfigPanel({ config, onChange, onTest, disabled }: LLMConfigPanelProps) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [advancedExpanded, setAdvancedExpanded] = useState(false);
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [modelsLoading, setModelsLoading] = useState(false);
   const [modelsError, setModelsError] = useState<string | null>(null);
@@ -240,58 +241,71 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled }: L
           )}
 
           {/* Advanced Settings */}
-          <details className="config-advanced">
-            <summary>Advanced Settings</summary>
-            <div className="config-section">
-              <label className="config-label">
-                Max Tokens
-                <input
-                  type="number"
-                  className="config-input"
-                  value={config.maxTokens || ''}
-                  onChange={(e) => onChange({ ...config, maxTokens: e.target.value ? parseInt(e.target.value, 10) : undefined })}
-                  placeholder="e.g., 4096"
-                  disabled={disabled}
-                />
-              </label>
+          <div className="config-section">
+            <button
+              type="button"
+              className="advanced-settings-toggle"
+              onClick={() => setAdvancedExpanded(!advancedExpanded)}
+              disabled={disabled}
+            >
+              <span className="toggle-icon">{advancedExpanded ? '▼' : '▶'}</span>
+              Advanced Settings
+            </button>
+          </div>
+
+          {advancedExpanded && (
+            <div className="config-advanced">
+              <div className="config-section">
+                <label className="config-label">
+                  Max Tokens
+                  <input
+                    type="number"
+                    className="config-input"
+                    value={config.maxTokens || ''}
+                    onChange={(e) => onChange({ ...config, maxTokens: e.target.value ? parseInt(e.target.value, 10) : undefined })}
+                    placeholder="e.g., 4096"
+                    disabled={disabled}
+                  />
+                </label>
+              </div>
+              <div className="config-section">
+                <label className="config-label">
+                  System Message
+                  <textarea
+                    className="config-textarea"
+                    value={config.systemMessage || ''}
+                    onChange={(e) => onChange({ ...config, systemMessage: e.target.value })}
+                    placeholder="e.g., You are a helpful assistant."
+                    rows={3}
+                    disabled={disabled}
+                  />
+                </label>
+              </div>
+              <div className="config-section">
+                <label className="config-label">
+                  Custom Headers (JSON)
+                  <textarea
+                    className={`config-textarea ${!isCustomHeadersValid ? 'input-error' : ''}`}
+                    value={customHeadersText}
+                    onChange={(e) => {
+                      const newText = e.target.value;
+                      setCustomHeadersText(newText);
+                      try {
+                        const headers = newText ? JSON.parse(newText) : undefined;
+                        onChange({ ...config, customHeaders: headers });
+                        setIsCustomHeadersValid(true);
+                      } catch {
+                        setIsCustomHeadersValid(false);
+                      }
+                    }}
+                    placeholder='{"Authorization": "Bearer token"}'
+                    rows={3}
+                    disabled={disabled}
+                  />
+                </label>
+              </div>
             </div>
-            <div className="config-section">
-              <label className="config-label">
-                System Message
-                <textarea
-                  className="config-textarea"
-                  value={config.systemMessage || ''}
-                  onChange={(e) => onChange({ ...config, systemMessage: e.target.value })}
-                  placeholder="e.g., You are a helpful assistant."
-                  rows={3}
-                  disabled={disabled}
-                />
-              </label>
-            </div>
-            <div className="config-section">
-              <label className="config-label">
-                Custom Headers (JSON)
-                <textarea
-                  className={`config-textarea ${!isCustomHeadersValid ? 'input-error' : ''}`}
-                  value={customHeadersText}
-                  onChange={(e) => {
-                    const newText = e.target.value;
-                    setCustomHeadersText(newText);
-                    try {
-                      const headers = newText ? JSON.parse(newText) : undefined;
-                      onChange({ ...config, customHeaders: headers });
-                      setIsCustomHeadersValid(true);
-                    } catch {
-                      setIsCustomHeadersValid(false);
-                    }
-                  }}
-                  placeholder='{"Authorization": "Bearer token"}'
-                  rows={3}
-                  disabled={disabled}
-                />
-              </label>
-            </div>
-          </details>
+          )}
 
           {/* Test Connection */}
           {onTest && (
