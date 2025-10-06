@@ -53,6 +53,15 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled }: L
   const [modelsError, setModelsError] = useState<string | null>(null);
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
   const [testMessage, setTestMessage] = useState('');
+  const [customHeadersText, setCustomHeadersText] = useState(
+    config.customHeaders ? JSON.stringify(config.customHeaders, null, 2) : ''
+  );
+  const [isCustomHeadersValid, setIsCustomHeadersValid] = useState(true);
+
+  useEffect(() => {
+    const newHeadersText = config.customHeaders ? JSON.stringify(config.customHeaders, null, 2) : '';
+    setCustomHeadersText(newHeadersText);
+  }, [config.customHeaders]);
 
   const currentProviderInfo = PROVIDER_INFO[config.provider];
 
@@ -263,14 +272,17 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled }: L
               <label className="config-label">
                 Custom Headers (JSON)
                 <textarea
-                  className="config-textarea"
-                  value={config.customHeaders ? JSON.stringify(config.customHeaders, null, 2) : ''}
+                  className={`config-textarea ${!isCustomHeadersValid ? 'input-error' : ''}`}
+                  value={customHeadersText}
                   onChange={(e) => {
+                    const newText = e.target.value;
+                    setCustomHeadersText(newText);
                     try {
-                      const headers = e.target.value ? JSON.parse(e.target.value) : undefined;
+                      const headers = newText ? JSON.parse(newText) : undefined;
                       onChange({ ...config, customHeaders: headers });
+                      setIsCustomHeadersValid(true);
                     } catch {
-                      // Invalid JSON, don't update
+                      setIsCustomHeadersValid(false);
                     }
                   }}
                   placeholder='{"Authorization": "Bearer token"}'
