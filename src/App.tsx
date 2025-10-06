@@ -345,6 +345,7 @@ export default function App() {
 
   const applyMoves = async () => {
     setBusy(true);
+    setScanState('organizing');
     const selected = rows.filter((r: Row) => r.enabled);
     const totalToMove = selected.length;
     const totalAnalyzed = rows.length;
@@ -371,6 +372,7 @@ export default function App() {
     setRows([]);
     const summary = `Done. Analyzed ${totalAnalyzed} files, organized ${movedCount} files${failedCount > 0 ? `, ${failedCount} failed` : ''}.`;
     setEvents((prev: string[]) => [summary, ...prev]);
+    setScanState('idle');
     setBusy(false);
   };
 
@@ -440,7 +442,10 @@ export default function App() {
               />
             </div>
             <div className="progress-text">
-              {progress.current} / {progress.total} files ({Math.round((progress.current / progress.total) * 100)}%)
+              {scanState === 'organizing' 
+                ? `${progress.current} out of ${progress.total} files moved`
+                : `${progress.current} / ${progress.total} files`
+              } ({Math.round((progress.current / progress.total) * 100)}%)
               {scanState === 'stopped' && ` - Stopped`}
               {scanState === 'paused' && ` - Paused`}
             </div>

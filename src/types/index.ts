@@ -22,7 +22,7 @@ export interface ClassifyResult {
   raw?: any;
 }
 
-export type ScanState = 'idle' | 'scanning' | 'paused' | 'stopped' | 'completed';
+export type ScanState = 'idle' | 'scanning' | 'paused' | 'stopped' | 'completed' | 'organizing';
 
 export interface ScanControl {
   state: ScanState;

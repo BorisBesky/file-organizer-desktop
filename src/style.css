@@ -598,14 +598,45 @@ label input[type="checkbox"] {
 .llm-config-content {
   margin-top: 12px;
   padding-top: 12px;
+  padding-right: 4px;
+  padding-bottom: 16px; /* Add bottom padding to ensure content is fully scrollable */
   border-top: 1px solid #d1d1d6;
-  max-height: 500px;
-  overflow-y: auto;
+  max-height: 300px;
+  min-height: 0;
+  overflow-y: scroll; /* Changed from auto to scroll to force scrollbar */
   overflow-x: hidden;
+  /* Force scrollbar to always show on webkit browsers */
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Custom scrollbar for LLM config content */
+.llm-config-content::-webkit-scrollbar {
+  width: 10px;
+  display: block;
+}
+
+.llm-config-content::-webkit-scrollbar-track {
+  background: #f5f5f7;
+  border-radius: 5px;
+  margin: 2px 0;
+}
+
+.llm-config-content::-webkit-scrollbar-thumb {
+  background: #b0b0b5;
+  border-radius: 5px;
+  border: 2px solid #f5f5f7;
+}
+
+.llm-config-content::-webkit-scrollbar-thumb:hover {
+  background: #8e8e93;
 }
 
 .config-section {
   margin-bottom: 12px;
+}
+
+.config-section:last-child {
+  margin-bottom: 0; /* Remove bottom margin on last section since parent has padding-bottom */
 }
 
 .config-label {
