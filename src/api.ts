@@ -1,3 +1,29 @@
+import { invoke } from '@tauri-apps/api/tauri';
+
+// Helper function to make HTTP requests via Tauri backend (bypasses CORS)
+async function tauriFetch(url: string, options: {
+  method: string;
+  headers: Record<string, string>;
+  body?: any;
+}): Promise<{ ok: boolean; status: number; data: string }> {
+  try {
+    const bodyString = options.body ? JSON.stringify(options.body) : undefined;
+    const text = await invoke<string>('http_request', {
+      url,
+      method: options.method,
+      headers: options.headers,
+      body: bodyString,
+    });
+    return { ok: true, status: 200, data: text };
+  } catch (error: any) {
+    // Parse error message to extract status code if present
+    const statusMatch = error.match(/HTTP (\d+):/);
+    const status = statusMatch ? parseInt(statusMatch[1]) : 500;
+    const message = error.toString();
+    return { ok: false, status, data: message };
+  }
+}
+
 // LLM Provider Configuration Types
 export type LLMProviderType = 'lmstudio' | 'ollama' | 'openai' | 'anthropic' | 'groq' | 'gemini' | 'custom';
 
@@ -77,11 +103,12 @@ function buildHeaders(config: LLMConfig): Record<string, string> {
 
   if (config.apiKey) {
     if (config.provider === 'anthropic') {
-      headers['x-api-key'] = config.apiKey;
+      headers['x-api-key'] = headers['x-api-key'] ?? config.apiKey;
       headers['anthropic-version'] = '2023-06-01';
     } else if (config.provider === 'gemini') {
       // Gemini uses API key in URL, not in headers
-    } else {
+    } else if (!headers['Authorization']) {
+      // Only set Authorization header if not already provided in customHeaders
       headers['Authorization'] = `Bearer ${config.apiKey}`;
     }
   }
@@ -241,10 +268,10 @@ export async function classifyViaLLM(opts: {
 
   let resp;
   try {
-    resp = await fetch(endpoint, {
+    resp = await tauriFetch(endpoint, {
       method: 'POST',
       headers,
-      body: JSON.stringify(body),
+      body,
     });
   } catch (fetchError: any) {
     console.error('Fetch error:', fetchError);
@@ -254,14 +281,13 @@ export async function classifyViaLLM(opts: {
   console.log('LLM Response:', { status: resp.status, ok: resp.ok });
 
   if (!resp.ok) {
-    const errorText = await resp.text();
-    throw new Error(`${config.provider} API error: ${resp.status} ${resp.statusText}\n${errorText}`);
+    throw new Error(`${config.provider} API error: ${resp.status}\n${resp.data}`);
   }
 
   // Parse the response text as JSON
   let data;
   try {
-    data = await resp.json();
+    data = JSON.parse(resp.data);
   } catch (parseError: any) {
     throw new Error(`Failed to parse response from ${config.provider}: ${parseError.message}`);
   }
@@ -325,24 +351,23 @@ ${treeText}`;
 
   let resp;
   try {
-    resp = await fetch(endpoint, {
+    resp = await tauriFetch(endpoint, {
       method: 'POST',
       headers,
-      body: JSON.stringify(body),
+      body,
     });
   } catch (fetchError: any) {
     throw new Error(`Network error connecting to ${config.provider} at ${endpoint}: ${fetchError.message || 'Connection failed'}`);
   }
 
   if (!resp.ok) {
-    const errorText = await resp.text();
-    throw new Error(`${config.provider} API error: ${resp.status} ${resp.statusText}\n${errorText}`);
+    throw new Error(`${config.provider} API error: ${resp.status}\n${resp.data}`);
   }
   
   // Parse the response text as JSON
   let data;
   try {
-    data = await resp.json();
+    data = JSON.parse(resp.data);
   } catch (parseError: any) {
     throw new Error(`Failed to parse response from ${config.provider}: ${parseError.message}`);
   }
@@ -371,12 +396,11 @@ export async function optimizeCategoriesViaLMStudio(opts: {
 export async function listOllamaModels(baseUrl: string): Promise<string[]> {
   const url = baseUrl.replace(/\/$/, '') + '/api/tags';
   try {
-    const resp = await fetch(url, { method: 'GET' });
+    const resp = await tauriFetch(url, { method: 'GET', headers: {} });
     if (!resp.ok) {
-      const text = await resp.text();
-      throw new Error(`Ollama error ${resp.status}: ${text}`);
+      throw new Error(`Ollama error ${resp.status}: ${resp.data}`);
     }
-    const data = await resp.json();
+    const data = JSON.parse(resp.data);
     // Ollama returns { models: [...] } where each model has a `name` property
     if (data && Array.isArray(data.models)) {
       return data.models.map((m: any) => m.name || String(m));
@@ -391,12 +415,11 @@ export async function listOllamaModels(baseUrl: string): Promise<string[]> {
 export async function listLMStudioModels(baseUrl: string): Promise<string[]> {
   const url = baseUrl.replace(/\/$/, '') + '/v1/models';
   try {
-    const resp = await fetch(url, { method: 'GET' });
+    const resp = await tauriFetch(url, { method: 'GET', headers: {} });
     if (!resp.ok) {
-      const text = await resp.text();
-      throw new Error(`LM Studio error ${resp.status}: ${text}`);
+      throw new Error(`LM Studio error ${resp.status}: ${resp.data}`);
     }
-    const data = await resp.json();
+    const data = JSON.parse(resp.data);
     // LM Studio returns { data: [...] } where each model has an `id` property
     if (data && Array.isArray(data.data)) {
       return data.data.map((m: any) => m.id || String(m));

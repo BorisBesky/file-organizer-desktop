@@ -1088,6 +1088,7 @@ name = "file-organizer-desktop"
 version = "0.1.0"
 dependencies = [
  "pdf-extract",
+ "reqwest",
  "serde",
  "serde_json",
  "tauri",

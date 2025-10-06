@@ -31,6 +31,55 @@ async fn read_directory(path: String, include_subdirectories: bool) -> Result<Ve
 }
 
 #[command]
+async fn http_request(
+    url: String,
+    method: String,
+    headers: std::collections::HashMap<String, String>,
+    body: Option<String>,
+) -> Result<String, String> {
+    let client = reqwest::Client::new();
+    
+    let mut request = match method.to_uppercase().as_str() {
+        "GET" => client.get(&url),
+        "POST" => client.post(&url),
+        "PUT" => client.put(&url),
+        "DELETE" => client.delete(&url),
+        _ => return Err(format!("Unsupported HTTP method: {}", method)),
+    };
+
+    // Add headers
+    for (key, value) in headers {
+        request = request.header(key, value);
+    }
+
+    // Add body if present
+    if let Some(body_content) = body {
+        request = request.body(body_content);
+    }
+
+    // Execute request
+    let response = request
+        .send()
+        .await
+        .map_err(|e| format!("Request failed: {}", e))?;
+
+    // Get status for error handling
+    let status = response.status();
+    
+    // Get response text
+    let text = response
+        .text()
+        .await
+        .map_err(|e| format!("Failed to read response: {}", e))?;
+
+    if !status.is_success() {
+        return Err(format!("HTTP {}: {}", status.as_u16(), text));
+    }
+
+    Ok(text)
+}
+
+#[command]
 async fn read_file_content(path: String) -> Result<String, String> {
     if path.ends_with(".pdf") {
         // Use a more robust approach for PDF extraction with error handling
@@ -143,7 +192,8 @@ fn main() {
             read_directory,
             pick_directory,
             read_file_content,
-            move_file
+            move_file,
+            http_request
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
