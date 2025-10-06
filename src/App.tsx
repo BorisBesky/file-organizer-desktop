@@ -365,15 +365,15 @@ export default function App() {
         
         {scanState === 'scanning' && (
           <>
-            <button onClick={pauseScan} disabled={!busy}>Pause</button>
-            <button onClick={stopScan} disabled={!busy}>Stop</button>
+            <button className="warning" onClick={pauseScan} disabled={!busy}>Pause</button>
+            <button className="danger" onClick={stopScan} disabled={!busy}>Stop</button>
           </>
         )}
         
         {scanState === 'paused' && (
           <>
             <button onClick={resumeScan}>Resume</button>
-            <button onClick={stopScan}>Stop</button>
+            <button className="danger" onClick={stopScan}>Stop</button>
           </>
         )}
         
@@ -382,7 +382,7 @@ export default function App() {
         )}
         
         {scanState === 'completed' && (
-          <button onClick={resetScan}>New Scan</button>
+          <button className="secondary" onClick={resetScan}>New Scan</button>
         )}
         
         <span>{directory ? `Selected: ${directory}` : 'No directory selected'}</span>
@@ -456,7 +456,7 @@ export default function App() {
             </table>
           </div>
           <div className="mt8">
-            <button onClick={optimizeCategories} disabled={busy}>
+            <button className="secondary" onClick={optimizeCategories} disabled={busy}>
               {busy ? 'Optimizing...' : 'Optimize Categories'}
             </button>
             <button onClick={applyMoves} disabled={busy}>Approve Selected</button>
