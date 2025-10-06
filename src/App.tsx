@@ -346,17 +346,31 @@ export default function App() {
   const applyMoves = async () => {
     setBusy(true);
     const selected = rows.filter((r: Row) => r.enabled);
-    for (const row of selected) {
+    const totalToMove = selected.length;
+    const totalAnalyzed = rows.length;
+    let movedCount = 0;
+    let failedCount = 0;
+    
+    // Update progress to show organizing phase
+    setProgress({ current: 0, total: totalToMove });
+    
+    for (let i = 0; i < selected.length; i++) {
+      const row = selected[i];
       const to = toPath(row);
       try {
         await invoke('move_file', { from: row.src, to });
+        movedCount++;
+        setProgress({ current: movedCount, total: totalToMove });
         setEvents((prev: string[]) => [`Moved ${row.src} to ${to}`, ...prev]);
       } catch (e: any) {
+        failedCount++;
         setEvents((prev: string[]) => [`Failed to move ${row.src}: ${e}`, ...prev]);
       }
     }
+    
     setRows([]);
-    setEvents((prev: string[]) => ['Done.', ...prev]);
+    const summary = `Done. Analyzed ${totalAnalyzed} files, organized ${movedCount} files${failedCount > 0 ? `, ${failedCount} failed` : ''}.`;
+    setEvents((prev: string[]) => [summary, ...prev]);
     setBusy(false);
   };
 
@@ -593,7 +607,7 @@ export default function App() {
             </div>
           ) : (
             <div className="content-empty">
-              <p>Select a directory and start a scan to organize your files.</p>
+              <p>Configure a LLM provider, select a directory and start a scan to organize your files.</p>
             </div>
           )}
         </main>

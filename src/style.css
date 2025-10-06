@@ -549,9 +549,9 @@ label input[type="checkbox"] {
 .llm-config-panel {
   border: 1px solid #e5e5e5;
   border-radius: 8px;
-  padding: 16px;
-  background: #f5f5f7;
-  margin-bottom: 24px;
+  padding: 12px;
+  background: white;
+  overflow: hidden;
 }
 
 .llm-config-header {
@@ -562,18 +562,21 @@ label input[type="checkbox"] {
   width: 100%;
   background: transparent;
   border: none;
-  padding: 8px 12px;
-  font-size: 15px;
+  padding: 6px 8px;
+  font-size: 14px;
   font-weight: 600;
   text-align: left;
   cursor: pointer;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   color: #000;
   border-radius: 6px;
   transition: background-color 0.15s;
   height: auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .llm-config-toggle:hover:not(:disabled) {
@@ -593,20 +596,23 @@ label input[type="checkbox"] {
 }
 
 .llm-config-content {
-  margin-top: 16px;
-  padding-top: 16px;
+  margin-top: 12px;
+  padding-top: 12px;
   border-top: 1px solid #d1d1d6;
+  max-height: 500px;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .config-section {
-  margin-bottom: 16px;
+  margin-bottom: 12px;
 }
 
 .config-label {
   display: block;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
   color: #000;
 }
 
@@ -614,10 +620,10 @@ label input[type="checkbox"] {
 .config-textarea {
   display: block;
   width: 100%;
-  padding: 8px 12px;
+  padding: 6px 10px;
   border: 1px solid #d1d1d6;
   border-radius: 6px;
-  font-size: 13px;
+  font-size: 12px;
   margin-top: 4px;
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
   background: white;
@@ -640,9 +646,11 @@ label input[type="checkbox"] {
 }
 
 .config-hint {
-  font-size: 12px;
+  font-size: 11px;
   color: #6e6e73;
   margin-top: 4px;
+  line-height: 1.4;
+  word-wrap: break-word;
 }
 
 .model-error {
