@@ -9,7 +9,8 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-    "test:ollama": "ts-node --esm tests/ollama-response.test.ts"
+  "test:ollama": "ts-node --esm tests/ollama-response.test.ts",
+  "test:lmstudio": "ts-node --esm tests/lmstudio-connection.test.ts"
   },
   "dependencies": {
     "react": "^18.2.0",

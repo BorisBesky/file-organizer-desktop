@@ -6,6 +6,8 @@ export interface LLMConfig {
   baseUrl: string;
   apiKey?: string; // Optional for local providers
   model: string;
+  maxTokens?: number;
+  systemMessage?: string;
   customHeaders?: Record<string, string>;
 }
 
@@ -78,12 +80,14 @@ function buildHeaders(config: LLMConfig): Record<string, string> {
 }
 
 function buildRequestBody(config: LLMConfig, prompt: string, systemMessage: string): any {
+  const finalSystemMessage = config.systemMessage ?? systemMessage;
+
   switch (config.provider) {
     case 'ollama':
       return {
         model: config.model,
         messages: [
-          { role: 'system', content: systemMessage },
+          { role: 'system', content: finalSystemMessage },
           { role: 'user', content: prompt },
         ],
         stream: false,
@@ -92,24 +96,27 @@ function buildRequestBody(config: LLMConfig, prompt: string, systemMessage: stri
     case 'anthropic':
       return {
         model: config.model,
-        max_tokens: 4096,
-        system: systemMessage,
+        max_tokens: config.maxTokens ?? 4096,
+        system: finalSystemMessage,
         messages: [
           { role: 'user', content: prompt },
         ],
       };
     
     default: // OpenAI-compatible (openai, groq, lmstudio, custom)
-      return {
+      const body: Record<string, any> = {
         model: config.model,
         messages: [
-          { role: 'system', content: systemMessage },
+          { role: 'system', content: finalSystemMessage },
           { role: 'user', content: prompt },
         ],
         temperature: 0.2,
-        max_tokens: -1,
         stream: false,
       };
+      if (config.provider !== 'lmstudio') {
+        body.max_tokens = config.maxTokens ?? 4096;
+      }
+      return body;
   }
 }
 
@@ -190,7 +197,7 @@ export async function classifyViaLLM(opts: {
   const hint = categoriesHint?.length ? `\n\nExisting categories (prefer one of these if appropriate):\n- ${categoriesHint.join('\n- ')}` : '';
   const prompt = `${promptTemplate}\n\nOriginal filename: ${originalName}\nContent (truncated to 4000 chars):\n${text.slice(0, 4000)}${hint}`;
 
-  const systemMessage = 'Return only valid JSON (no markdown), with keys: category_path, suggested_filename, confidence (0-1).';
+  const systemMessage = config.systemMessage || 'Return only valid JSON (no markdown), with keys: category_path, suggested_filename, confidence (0-1).';
   
   const endpoint = getCompletionEndpoint(config);
   const headers = buildHeaders(config);
@@ -282,7 +289,7 @@ Reply in strict JSON with key "optimizations" containing an array of objects wit
 Current directory structure:
 ${treeText}`;
 
-  const systemMessage = 'Return only valid JSON (no markdown), with key "optimizations" containing an array of optimization suggestions.';
+  const systemMessage = config.systemMessage || 'Return only valid JSON (no markdown), with key "optimizations" containing an array of optimization suggestions.';
   
   const endpoint = getCompletionEndpoint(config);
   const headers = buildHeaders(config);

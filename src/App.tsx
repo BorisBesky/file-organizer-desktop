@@ -35,6 +35,8 @@ export default function App() {
     provider: 'lmstudio',
     baseUrl: 'http://localhost:1234',
     model: 'local-model',
+    maxTokens: 4096,
+    systemMessage: 'Return only valid JSON (no markdown), with keys: category_path, suggested_filename, confidence (0-1).',
   });
   const [directory, setDirectory] = useState<string | null>(null);
   const [includeSubdirectories, setIncludeSubdirectories] = useState(false);

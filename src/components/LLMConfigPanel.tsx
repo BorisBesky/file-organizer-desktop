@@ -182,6 +182,32 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled }: L
             <summary>Advanced Settings</summary>
             <div className="config-section">
               <label className="config-label">
+                Max Tokens
+                <input
+                  type="number"
+                  className="config-input"
+                  value={config.maxTokens || ''}
+                  onChange={(e) => onChange({ ...config, maxTokens: e.target.value ? parseInt(e.target.value, 10) : undefined })}
+                  placeholder="e.g., 4096"
+                  disabled={disabled}
+                />
+              </label>
+            </div>
+            <div className="config-section">
+              <label className="config-label">
+                System Message
+                <textarea
+                  className="config-textarea"
+                  value={config.systemMessage || ''}
+                  onChange={(e) => onChange({ ...config, systemMessage: e.target.value })}
+                  placeholder="e.g., You are a helpful assistant."
+                  rows={3}
+                  disabled={disabled}
+                />
+              </label>
+            </div>
+            <div className="config-section">
+              <label className="config-label">
                 Custom Headers (JSON)
                 <textarea
                   className="config-textarea"
