@@ -18,7 +18,7 @@ export const DEFAULT_CONFIGS: Record<LLMProviderType, Partial<LLMConfig>> = {
   ollama: {
     provider: 'ollama',
     baseUrl: 'http://localhost:11434',
-    model: 'llama2',
+    model: 'deepseek-r1:8b',
   },
   openai: {
     provider: 'openai',
@@ -113,15 +113,66 @@ function buildRequestBody(config: LLMConfig, prompt: string, systemMessage: stri
   }
 }
 
+export function normalizeOllamaContent(rawContent: unknown): string {
+  const extractText = (value: unknown): string => {
+    if (!value) return '';
+    if (typeof value === 'string') return value;
+    if (Array.isArray(value)) {
+      return value.map((item) => extractText(item)).join('');
+    }
+    if (typeof value === 'object') {
+      const maybeRecord = value as Record<string, unknown>;
+      const type = typeof maybeRecord.type === 'string' ? maybeRecord.type.toLowerCase() : undefined;
+      if (type && ['thinking', 'reasoning', 'metadata'].includes(type)) {
+        return '';
+      }
+      if (typeof maybeRecord.text === 'string') return maybeRecord.text;
+      if (maybeRecord.content !== undefined) return extractText(maybeRecord.content);
+      if (typeof maybeRecord.value === 'string') return maybeRecord.value;
+    }
+    return '';
+  };
+
+  const stripThinking = (value: string): string =>
+    value.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+
+  const flattened = extractText(rawContent);
+  const cleaned = stripThinking(flattened);
+  return cleaned || '{}';
+}
+
+function safeParseJson<T>(payload: string, fallback: () => T): T {
+  try {
+    return JSON.parse(payload) as T;
+  } catch (primaryError) {
+    try {
+      const match = payload.match(/\{[\s\S]*\}/);
+      if (match) {
+        return JSON.parse(match[0]) as T;
+      }
+    } catch (secondaryError) {
+      // Intentionally swallow and use fallback
+    }
+  }
+  return fallback();
+}
+
 function extractContent(config: LLMConfig, data: any): string {
+  let rawContent: unknown;
+
   switch (config.provider) {
     case 'ollama':
-      return data?.message?.content ?? '{}';
+      rawContent = data?.message?.content;
+      break;
     case 'anthropic':
-      return data?.content?.[0]?.text ?? '{}';
+      rawContent = data?.content?.[0]?.text ?? data?.content;
+      break;
     default:
-      return data?.choices?.[0]?.message?.content ?? '{}';
+      rawContent = data?.choices?.[0]?.message?.content;
+      break;
   }
+
+  return normalizeOllamaContent(rawContent);
 }
 
 // Unified function that works with any LLM provider
@@ -145,26 +196,47 @@ export async function classifyViaLLM(opts: {
   const headers = buildHeaders(config);
   const body = buildRequestBody(config, prompt, systemMessage);
 
-  const resp = await fetch(endpoint, {
-    method: 'POST',
+  // Debug logging
+  console.log('LLM Request:', {
+    provider: config.provider,
+    endpoint,
     headers,
-    body: JSON.stringify(body),
+    bodyPreview: { model: config.model, messageCount: body.messages?.length }
   });
+
+  let resp;
+  try {
+    resp = await fetch(endpoint, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+    });
+  } catch (fetchError: any) {
+    console.error('Fetch error:', fetchError);
+    throw new Error(`Network error connecting to ${config.provider} at ${endpoint}: ${fetchError.message || 'Connection failed'}`);
+  }
+
+  console.log('LLM Response:', { status: resp.status, ok: resp.ok });
 
   if (!resp.ok) {
     const errorText = await resp.text();
     throw new Error(`${config.provider} API error: ${resp.status} ${resp.statusText}\n${errorText}`);
   }
 
-  const data = await resp.json();
-  const content = extractContent(config, data);
-  
+  // Parse the response text as JSON
+  let data;
   try {
-    return JSON.parse(content);
-  } catch (e) {
-    const m = content.match(/\{[\s\S]*\}/);
-    return m ? JSON.parse(m[0]) : { category_path: 'uncategorized', suggested_filename: originalName.replace(/\.[^/.]+$/, ''), confidence: 0 };
+    data = await resp.json();
+  } catch (parseError: any) {
+    throw new Error(`Failed to parse response from ${config.provider}: ${parseError.message}`);
   }
+
+  const content = extractContent(config, data);
+  return safeParseJson(content, () => ({
+    category_path: 'uncategorized',
+    suggested_filename: originalName.replace(/\.[^/.]+$/, ''),
+    confidence: 0,
+  }));
 }
 
 // Backward compatibility wrapper for LM Studio
@@ -216,26 +288,32 @@ ${treeText}`;
   const headers = buildHeaders(config);
   const body = buildRequestBody(config, promptTemplate, systemMessage);
 
-  const resp = await fetch(endpoint, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(body),
-  });
+  let resp;
+  try {
+    resp = await fetch(endpoint, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+    });
+  } catch (fetchError: any) {
+    throw new Error(`Network error connecting to ${config.provider} at ${endpoint}: ${fetchError.message || 'Connection failed'}`);
+  }
 
   if (!resp.ok) {
     const errorText = await resp.text();
     throw new Error(`${config.provider} API error: ${resp.status} ${resp.statusText}\n${errorText}`);
   }
   
-  const data = await resp.json();
-  const content = extractContent(config, data);
-  
+  // Parse the response text as JSON
+  let data;
   try {
-    return JSON.parse(content);
-  } catch (e) {
-    const m = content.match(/\{[\s\S]*\}/);
-    return m ? JSON.parse(m[0]) : { optimizations: [] };
+    data = await resp.json();
+  } catch (parseError: any) {
+    throw new Error(`Failed to parse response from ${config.provider}: ${parseError.message}`);
   }
+
+  const content = extractContent(config, data);
+  return safeParseJson(content, () => ({ optimizations: [] }));
 }
 
 // Backward compatibility wrapper for LM Studio

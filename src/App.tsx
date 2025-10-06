@@ -37,6 +37,7 @@ export default function App() {
     model: 'local-model',
   });
   const [directory, setDirectory] = useState<string | null>(null);
+  const [includeSubdirectories, setIncludeSubdirectories] = useState(false);
   const [busy, setBusy] = useState(false);
   const [events, setEvents] = useState<string[]>([]);
   const [rows, setRows] = useState<Row[]>([]);
@@ -218,7 +219,7 @@ export default function App() {
     setProgress({ current: 0, total: 0 });
 
     try {
-      const files: string[] = await invoke('read_directory', { path: directory });
+      const files: string[] = await invoke('read_directory', { path: directory, includeSubdirectories: includeSubdirectories });
       const processableFiles = files.filter(f => !splitPath(f).name.startsWith('.'));
       
       scanControlRef.current.allFiles = processableFiles;
@@ -322,14 +323,20 @@ export default function App() {
 
   const testLLMConnection = async () => {
     // Simple test by sending a minimal classification request
-    const testResult = await classifyViaLLM({
-      config: llmConfig,
-      text: 'Test document for connection verification',
-      originalName: 'test.txt',
-      categoriesHint: [],
-    });
-    if (!testResult || !testResult.category_path) {
-      throw new Error('Invalid response from LLM provider');
+    try {
+      const testResult = await classifyViaLLM({
+        config: llmConfig,
+        text: 'Test document for connection verification',
+        originalName: 'test.txt',
+        categoriesHint: [],
+      });
+      if (!testResult || !testResult.category_path) {
+        throw new Error('Invalid response from LLM provider');
+      }
+    } catch (error: any) {
+      // Provide more detailed error message
+      const message = error.message || String(error);
+      throw new Error(`Connection test failed: ${message}`);
     }
   };
 
@@ -377,6 +384,18 @@ export default function App() {
         )}
         
         <span>{directory ? `Selected: ${directory}` : 'No directory selected'}</span>
+      </div>
+
+      <div className="row">
+        <label>
+          <input 
+            type="checkbox" 
+            checked={includeSubdirectories} 
+            onChange={e => setIncludeSubdirectories(e.target.checked)}
+            disabled={busy || scanState === 'scanning' || scanState === 'paused'}
+          />
+          Include subdirectories
+        </label>
       </div>
 
       {(busy || scanState !== 'idle') && progress.total > 0 && (

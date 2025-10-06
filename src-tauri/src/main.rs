@@ -9,12 +9,22 @@ use tauri::api::dialog::FileDialogBuilder;
 use tauri::{command, AppHandle, Manager};
 
 #[command]
-async fn read_directory(path: String) -> Result<Vec<String>, String> {
-    fs::read_dir(path)
+async fn read_directory(path: String, include_subdirectories: bool) -> Result<Vec<String>, String> {
+    let entries = fs::read_dir(path)
         .map_err(|e| e.to_string())?
-        .map(|res| res.map(|e| e.path().to_string_lossy().into_owned()))
-        .collect::<Result<Vec<String>, std::io::Error>>()
-        .map_err(|e| e.to_string())
+        .filter_map(|res| res.ok())
+        .filter(|entry| {
+            if include_subdirectories {
+                true
+            } else {
+                // Only include files (skip directories)
+                entry.path().is_file()
+            }
+        })
+        .map(|e| e.path().to_string_lossy().into_owned())
+        .collect::<Vec<String>>();
+    
+    Ok(entries)
 }
 
 #[command]

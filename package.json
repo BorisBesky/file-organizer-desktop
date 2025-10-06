@@ -8,7 +8,8 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "test:ollama": "ts-node --esm tests/ollama-response.test.ts"
   },
   "dependencies": {
     "react": "^18.2.0",
@@ -21,7 +22,8 @@
     "@vitejs/plugin-react": "^4.2.1",
     "typescript": "^5.0.2",
     "vite": "^5.0.0",
-    "@tauri-apps/cli": "^1.5.9"
+    "@tauri-apps/cli": "^1.5.9",
+    "ts-node": "^10.9.2"
   },
   "keywords": [
     "file",
