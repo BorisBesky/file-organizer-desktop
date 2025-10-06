@@ -5,6 +5,7 @@
 
 use std::fs;
 use std::path::Path;
+use std::io::Write;
 use tauri::api::dialog::FileDialogBuilder;
 use tauri::{command, AppHandle, Manager, CustomMenuItem, Menu, MenuItem, Submenu, WindowMenuEvent};
 use walkdir::WalkDir;
@@ -80,8 +81,29 @@ async fn http_request(
 }
 
 #[command]
+async fn save_diagnostic_logs(content: String, filename: String) -> Result<String, String> {
+    // Get the user's home directory
+    let home_dir = dirs::home_dir()
+        .ok_or_else(|| "Could not find home directory".to_string())?;
+    
+    // Create a path in the user's Downloads folder
+    let downloads_dir = home_dir.join("Downloads");
+    let file_path = downloads_dir.join(&filename);
+    
+    // Write the content to the file
+    let mut file = fs::File::create(&file_path)
+        .map_err(|e| format!("Failed to create file: {}", e))?;
+    
+    file.write_all(content.as_bytes())
+        .map_err(|e| format!("Failed to write to file: {}", e))?;
+    
+    // Return the full path where the file was saved
+    Ok(file_path.to_string_lossy().to_string())
+}
+
+#[command]
 async fn read_file_content(path: String) -> Result<String, String> {
-    if path.ends_with(".pdf") {
+    if path.to_lowercase().ends_with(".pdf") {
         // Use a more robust approach for PDF extraction with error handling
         match std::panic::catch_unwind(|| pdf_extract::extract_text(&path)) {
             Ok(Ok(text)) => Ok(text),
@@ -193,7 +215,8 @@ fn main() {
             pick_directory,
             read_file_content,
             move_file,
-            http_request
+            http_request,
+            save_diagnostic_logs
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

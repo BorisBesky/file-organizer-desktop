@@ -9,22 +9,25 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
-  "test:ollama": "ts-node --esm tests/ollama-response.test.ts",
-  "test:lmstudio": "ts-node --esm tests/lmstudio-connection.test.ts"
+    "test:ollama": "ts-node --esm tests/ollama-response.test.ts",
+    "test:lmstudio": "ts-node --esm tests/lmstudio-connection.test.ts",
+    "test:custom-llm": "ts-node --esm tests/custom-llm-with-headers.test.ts",
+    "test:custom-llm-standalone": "tsx tests/custom-llm-standalone.test.ts"
   },
   "dependencies": {
+    "@tauri-apps/api": "^1.5.3",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "@tauri-apps/api": "^1.5.3"
+    "react-dom": "^18.2.0"
   },
   "devDependencies": {
+    "@tauri-apps/cli": "^1.5.9",
     "@types/react": "^18.2.15",
     "@types/react-dom": "^18.2.7",
     "@vitejs/plugin-react": "^4.2.1",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.20.6",
     "typescript": "^5.0.2",
-    "vite": "^5.0.0",
-    "@tauri-apps/cli": "^1.5.9",
-    "ts-node": "^10.9.2"
+    "vite": "^5.0.0"
   },
   "keywords": [
     "file",

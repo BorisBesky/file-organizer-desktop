@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/tauri';
+import { debugLogger } from './debug-logger';
 
 // Helper function to make HTTP requests via Tauri backend (bypasses CORS)
 async function tauriFetch(url: string, options: {
@@ -17,10 +18,10 @@ async function tauriFetch(url: string, options: {
     return { ok: true, status: 200, data: text };
   } catch (error: any) {
     // Parse error message to extract status code if present
-    const statusMatch = error.match(/HTTP (\d+):/);
+    const errorMessage = error?.toString() || String(error);
+    const statusMatch = errorMessage.match(/HTTP (\d+):/);
     const status = statusMatch ? parseInt(statusMatch[1]) : 500;
-    const message = error.toString();
-    return { ok: false, status, data: message };
+    return { ok: false, status, data: errorMessage };
   }
 }
 
@@ -96,22 +97,69 @@ function getCompletionEndpoint(config: LLMConfig): string {
 }
 
 function buildHeaders(config: LLMConfig): Record<string, string> {
+  debugLogger.debug('BUILD_HEADERS', 'Building headers', {
+    provider: config.provider,
+    hasApiKey: !!config.apiKey,
+    hasCustomHeaders: !!config.customHeaders,
+    customHeaderKeys: config.customHeaders ? Object.keys(config.customHeaders) : [],
+  });
+
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    ...config.customHeaders,
   };
 
+  // Set default authentication headers based on provider
   if (config.apiKey) {
     if (config.provider === 'anthropic') {
-      headers['x-api-key'] = headers['x-api-key'] ?? config.apiKey;
+      headers['x-api-key'] = config.apiKey;
       headers['anthropic-version'] = '2023-06-01';
+      debugLogger.debug('BUILD_HEADERS', 'Added Anthropic headers', {
+        hasXApiKey: true,
+        anthropicVersion: '2023-06-01',
+      });
     } else if (config.provider === 'gemini') {
       // Gemini uses API key in URL, not in headers
-    } else if (!headers['Authorization']) {
-      // Only set Authorization header if not already provided in customHeaders
+      debugLogger.debug('BUILD_HEADERS', 'Gemini provider - API key in URL', {});
+    } else {
+      // Default to Bearer token for OpenAI-compatible APIs
       headers['Authorization'] = `Bearer ${config.apiKey}`;
+      debugLogger.debug('BUILD_HEADERS', 'Added Bearer authorization', {
+        authHeaderSet: true,
+        authPrefix: 'Bearer',
+      });
     }
   }
+
+  // Apply custom headers last so they can override defaults
+  if (config.customHeaders) {
+    debugLogger.debug('BUILD_HEADERS', 'Applying custom headers', {
+      customHeaderKeys: Object.keys(config.customHeaders),
+      willOverrideAuth: 'Authorization' in config.customHeaders,
+    });
+    
+    // Smart merge: If custom Authorization header doesn't have Bearer prefix, add it
+    const customHeaders = { ...config.customHeaders };
+    if (customHeaders['Authorization'] && typeof customHeaders['Authorization'] === 'string') {
+      const authValue = customHeaders['Authorization'];
+      // Only add Bearer if it's not already there and looks like a raw token
+      if (!authValue.toLowerCase().startsWith('bearer ') && 
+          !authValue.toLowerCase().startsWith('basic ') &&
+          authValue.length > 10) {
+        customHeaders['Authorization'] = `Bearer ${authValue}`;
+        debugLogger.debug('BUILD_HEADERS', 'Auto-added Bearer prefix to custom Authorization', {
+          originalLength: authValue.length,
+          hadBearer: false,
+        });
+      }
+    }
+    
+    Object.assign(headers, customHeaders);
+  }
+
+  debugLogger.debug('BUILD_HEADERS', 'Final headers built', {
+    headers,
+    headerKeys: Object.keys(headers),
+  });
 
   return headers;
 }
@@ -258,37 +306,65 @@ export async function classifyViaLLM(opts: {
   const headers = buildHeaders(config);
   const body = buildRequestBody(config, prompt, systemMessage);
 
-  // Debug logging
-  console.log('LLM Request:', {
+  // Comprehensive debug logging
+  debugLogger.info('LLM_REQUEST', 'Preparing LLM request', {
     provider: config.provider,
     endpoint,
-    headers,
-    bodyPreview: { model: config.model, messageCount: body.messages?.length }
+    model: config.model,
+    hasApiKey: !!config.apiKey,
+    hasCustomHeaders: !!config.customHeaders,
+    customHeaderKeys: config.customHeaders ? Object.keys(config.customHeaders) : [],
+  });
+
+  debugLogger.debug('LLM_REQUEST', 'Request headers', { headers });
+  debugLogger.debug('LLM_REQUEST', 'Request body preview', {
+    model: body.model,
+    messageCount: body.messages?.length,
+    systemMessage: body.messages?.[0]?.content?.substring(0, 100),
   });
 
   let resp;
   try {
+    debugLogger.debug('LLM_REQUEST', 'Calling tauriFetch', { endpoint, method: 'POST' });
     resp = await tauriFetch(endpoint, {
       method: 'POST',
       headers,
       body,
     });
+    debugLogger.info('LLM_RESPONSE', 'Received response', { status: resp.status, ok: resp.ok });
   } catch (fetchError: any) {
-    console.error('Fetch error:', fetchError);
+    debugLogger.error('LLM_REQUEST', 'Fetch error', {
+      error: fetchError?.message || String(fetchError),
+      stack: fetchError?.stack,
+    });
     throw new Error(`Network error connecting to ${config.provider} at ${endpoint}: ${fetchError.message || 'Connection failed'}`);
   }
 
-  console.log('LLM Response:', { status: resp.status, ok: resp.ok });
-
   if (!resp.ok) {
+    debugLogger.error('LLM_RESPONSE', 'API returned error status', {
+      status: resp.status,
+      provider: config.provider,
+      errorData: resp.data,
+    });
     throw new Error(`${config.provider} API error: ${resp.status}\n${resp.data}`);
   }
 
   // Parse the response text as JSON
   let data;
   try {
+    debugLogger.debug('LLM_RESPONSE', 'Parsing response JSON', {
+      dataPreview: resp.data.substring(0, 200),
+    });
     data = JSON.parse(resp.data);
+    debugLogger.debug('LLM_RESPONSE', 'Successfully parsed JSON', {
+      hasChoices: Array.isArray(data?.choices),
+      choiceCount: data?.choices?.length,
+    });
   } catch (parseError: any) {
+    debugLogger.error('LLM_RESPONSE', 'Failed to parse JSON', {
+      error: parseError.message,
+      rawData: resp.data.substring(0, 500),
+    });
     throw new Error(`Failed to parse response from ${config.provider}: ${parseError.message}`);
   }
 

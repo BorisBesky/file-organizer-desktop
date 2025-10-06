@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { debugLogger } from '../debug-logger';
 
 interface HelpDialogProps {
   isOpen: boolean;
@@ -6,6 +7,32 @@ interface HelpDialogProps {
 }
 
 export default function HelpDialog({ isOpen, onClose }: HelpDialogProps) {
+  const [exportStatus, setExportStatus] = useState<string>('');
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleExportDiagnostics = async () => {
+    setIsExporting(true);
+    setExportStatus('Saving...');
+    
+    try {
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+      const filename = `file-organizer-diagnostics-${timestamp}.txt`;
+      const savedPath = await debugLogger.saveLogs(filename);
+      setExportStatus(`✅ Saved to: ${savedPath}`);
+      
+      // Clear success message after 5 seconds
+      setTimeout(() => setExportStatus(''), 5000);
+    } catch (error) {
+      setExportStatus(`❌ Failed to save: ${error}`);
+      console.error('Failed to export diagnostics:', error);
+      
+      // Clear error message after 5 seconds
+      setTimeout(() => setExportStatus(''), 5000);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -91,6 +118,32 @@ export default function HelpDialog({ isOpen, onClose }: HelpDialogProps) {
               <li><strong>macOS:</strong> Help menu → File Organizer Help (or press this shortcut if configured)</li>
               <li><strong>Windows/Linux:</strong> Help menu → File Organizer Help</li>
             </ul>
+          </section>
+
+          <section className="help-section">
+            <h3>🔧 Troubleshooting</h3>
+            <p>If you encounter issues with LLM connections or file organization:</p>
+            <ul>
+              <li><strong>Check LLM Configuration:</strong> Ensure your provider settings (URL, API key, model) are correct.</li>
+              <li><strong>Test Connection:</strong> Use the "Test Connection" button in LLM Config to verify your setup.</li>
+              <li><strong>Export Diagnostics:</strong> Click the button below to save detailed logs for debugging.</li>
+            </ul>
+            <button 
+              className="button-secondary diagnostics-button" 
+              onClick={handleExportDiagnostics}
+              disabled={isExporting}
+            >
+              📊 {isExporting ? 'Saving...' : 'Export Diagnostic Logs'}
+            </button>
+            {exportStatus && (
+              <p className="diagnostics-status">
+                {exportStatus}
+              </p>
+            )}
+            <p className="diagnostics-hint">
+              Saves to your Downloads folder with detailed logs of all API requests, responses, and configuration.
+              API keys are automatically sanitized for security.
+            </p>
           </section>
         </div>
 
