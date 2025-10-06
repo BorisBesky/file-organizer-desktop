@@ -499,9 +499,13 @@ label input[type="checkbox"] {
   cursor: pointer;
   transition: all 0.15s;
   text-align: left;
-  height: 100px;
+  min-height: 100px;
+  height: auto;
   display: flex;
   flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  white-space: normal;
 }
 
 .provider-card:hover:not(:disabled) {
@@ -511,9 +515,17 @@ label input[type="checkbox"] {
 }
 
 .provider-card.selected {
-  border-color: #007aff;
-  background: #e6f2ff;
-  box-shadow: 0 0 0 1px #007aff;
+  border-color: #0a84ff;
+  background: #f3f8ff;
+  box-shadow: 0 0 0 1px rgba(10, 132, 255, 0.35);
+}
+
+.provider-card.selected .provider-name {
+  color: #003a75;
+}
+
+.provider-card.selected .provider-desc {
+  color: #0f2440;
 }
 
 .provider-card:disabled {
@@ -526,6 +538,7 @@ label input[type="checkbox"] {
   font-size: 13px;
   margin-bottom: 6px;
   color: #000;
+  word-wrap: break-word;
 }
 
 .provider-desc {
@@ -533,6 +546,8 @@ label input[type="checkbox"] {
   color: #6e6e73;
   line-height: 1.5;
   flex: 1;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 
 .provider-badge {
