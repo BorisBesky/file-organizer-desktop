@@ -552,6 +552,8 @@ label input[type="checkbox"] {
   padding: 12px;
   background: white;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .llm-config-header {
@@ -599,14 +601,11 @@ label input[type="checkbox"] {
   margin-top: 12px;
   padding-top: 12px;
   padding-right: 4px;
-  padding-bottom: 16px; /* Add bottom padding to ensure content is fully scrollable */
+  padding-bottom: 24px; /* Increased bottom padding */
   border-top: 1px solid #d1d1d6;
-  max-height: 300px;
-  min-height: 0;
-  overflow-y: scroll; /* Changed from auto to scroll to force scrollbar */
+  overflow-y: auto; /* Changed to auto to only show scrollbar when needed */
   overflow-x: hidden;
-  /* Force scrollbar to always show on webkit browsers */
-  -webkit-overflow-scrolling: touch;
+  flex-grow: 1;
 }
 
 /* Custom scrollbar for LLM config content */
