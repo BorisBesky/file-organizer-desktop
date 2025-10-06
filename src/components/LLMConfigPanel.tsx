@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { LLMConfig, LLMProviderType, DEFAULT_CONFIGS } from '../api';
+import React, { useState, useEffect } from 'react';
+import { LLMConfig, LLMProviderType, DEFAULT_CONFIGS, listOllamaModels, listLMStudioModels } from '../api';
 
 interface LLMConfigPanelProps {
   config: LLMConfig;
@@ -48,6 +48,9 @@ const PROVIDER_INFO: Record<LLMProviderType, { name: string; description: string
 
 export default function LLMConfigPanel({ config, onChange, onTest, disabled }: LLMConfigPanelProps) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [availableModels, setAvailableModels] = useState<string[]>([]);
+  const [modelsLoading, setModelsLoading] = useState(false);
+  const [modelsError, setModelsError] = useState<string | null>(null);
   const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'success' | 'error'>('idle');
   const [testMessage, setTestMessage] = useState('');
 
@@ -63,6 +66,33 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled }: L
       apiKey: provider === config.provider ? config.apiKey : undefined,
     });
   };
+
+  // Fetch available local models when provider or baseUrl changes
+  useEffect(() => {
+    let mounted = true;
+    async function fetchModels() {
+      setAvailableModels([]);
+      setModelsError(null);
+      if (config.provider !== 'ollama' && config.provider !== 'lmstudio') return;
+      if (!config.baseUrl) return;
+      setModelsLoading(true);
+      try {
+        const models = config.provider === 'ollama'
+          ? await listOllamaModels(config.baseUrl)
+          : await listLMStudioModels(config.baseUrl);
+        if (!mounted) return;
+        setAvailableModels(models || []);
+      } catch (err: any) {
+        if (!mounted) return;
+        setModelsError(err?.message || 'Failed to fetch models');
+      } finally {
+        if (mounted) setModelsLoading(false);
+      }
+    }
+
+    fetchModels();
+    return () => { mounted = false; };
+  }, [config.provider, config.baseUrl]);
 
   const handleTestConnection = async () => {
     if (!onTest) return;
@@ -143,14 +173,31 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled }: L
           <div className="config-section">
             <label className="config-label">
               Model
-              <input
-                type="text"
-                className="config-input"
-                value={config.model}
-                onChange={(e) => onChange({ ...config, model: e.target.value })}
-                placeholder="e.g., gpt-4-turbo-preview"
-                disabled={disabled}
-              />
+              {config.provider === 'ollama' || config.provider === 'lmstudio' ? (
+                <>
+                  <select
+                    className="config-input"
+                    value={config.model}
+                    onChange={(e) => onChange({ ...config, model: e.target.value })}
+                    disabled={disabled || modelsLoading}
+                  >
+                    <option value="">Select a model{modelsLoading ? ' (loading...)' : ''}</option>
+                    {availableModels.map((m) => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
+                  {modelsError && <div className="config-hint model-error">{modelsError}</div>}
+                </>
+              ) : (
+                <input
+                  type="text"
+                  className="config-input"
+                  value={config.model}
+                  onChange={(e) => onChange({ ...config, model: e.target.value })}
+                  placeholder="e.g., gpt-4-turbo-preview"
+                  disabled={disabled}
+                />
+              )}
             </label>
             <div className="config-hint">
               {config.provider === 'openai' && 'Examples: gpt-4-turbo-preview, gpt-3.5-turbo'}

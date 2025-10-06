@@ -366,3 +366,44 @@ export async function optimizeCategoriesViaLMStudio(opts: {
     directoryTree: opts.directoryTree,
   });
 }
+
+// Helpers to list available local models for Ollama and LM Studio
+export async function listOllamaModels(baseUrl: string): Promise<string[]> {
+  const url = baseUrl.replace(/\/$/, '') + '/api/tags';
+  try {
+    const resp = await fetch(url, { method: 'GET' });
+    if (!resp.ok) {
+      const text = await resp.text();
+      throw new Error(`Ollama error ${resp.status}: ${text}`);
+    }
+    const data = await resp.json();
+    // Ollama returns { models: [...] } where each model has a `name` property
+    if (data && Array.isArray(data.models)) {
+      return data.models.map((m: any) => m.name || String(m));
+    }
+    return [];
+  } catch (e) {
+    console.warn('Failed to list Ollama models', e);
+    return [];
+  }
+}
+
+export async function listLMStudioModels(baseUrl: string): Promise<string[]> {
+  const url = baseUrl.replace(/\/$/, '') + '/v1/models';
+  try {
+    const resp = await fetch(url, { method: 'GET' });
+    if (!resp.ok) {
+      const text = await resp.text();
+      throw new Error(`LM Studio error ${resp.status}: ${text}`);
+    }
+    const data = await resp.json();
+    // LM Studio returns { data: [...] } where each model has an `id` property
+    if (data && Array.isArray(data.data)) {
+      return data.data.map((m: any) => m.id || String(m));
+    }
+    return [];
+  } catch (e) {
+    console.warn('Failed to list LM Studio models', e);
+    return [];
+  }
+}

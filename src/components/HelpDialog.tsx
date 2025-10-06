@@ -18,7 +18,7 @@ export default function HelpDialog({ isOpen, onClose }: HelpDialogProps) {
         
         <div className="modal-body">
           <section className="help-section">
-            <h3>🚀 Quick Start</h3>
+            <h3>Quick Start</h3>
             <ol>
               <li><strong>Configure LLM Provider:</strong> Expand the LLM Provider section and select your preferred AI service (LM Studio, Ollama, OpenAI, Anthropic, Groq, Gemini, or Custom).</li>
               <li><strong>Pick Directory:</strong> Click "Pick Directory" to select the folder containing files you want to organize.</li>
@@ -29,7 +29,7 @@ export default function HelpDialog({ isOpen, onClose }: HelpDialogProps) {
           </section>
 
           <section className="help-section">
-            <h3>⚙️ Features</h3>
+            <h3>Features</h3>
             <ul>
               <li><strong>Pause/Resume:</strong> You can pause the scan at any time and resume later without losing progress.</li>
               <li><strong>Stop & Continue:</strong> Stop the scan to review current results, then continue if needed.</li>
@@ -40,7 +40,7 @@ export default function HelpDialog({ isOpen, onClose }: HelpDialogProps) {
           </section>
 
           <section className="help-section">
-            <h3>🤖 LLM Providers</h3>
+            <h3>LLM Providers</h3>
             <ul>
               <li><strong>LM Studio:</strong> Local AI server. Start LM Studio and load a model first. Default: http://localhost:1234</li>
               <li><strong>Ollama:</strong> Local AI server. Install and run Ollama with a model like llama2 or mistral. Default: http://localhost:11434</li>
@@ -53,7 +53,7 @@ export default function HelpDialog({ isOpen, onClose }: HelpDialogProps) {
           </section>
 
           <section className="help-section">
-            <h3>📁 How It Works</h3>
+            <h3>How It Works</h3>
             <p>The AI reads your file contents and:</p>
             <ol>
               <li>Classifies each file into a category path (e.g., "finance/taxes", "medical/bills").</li>
