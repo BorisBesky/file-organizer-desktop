@@ -21,7 +21,7 @@ const PROVIDER_INFO: Record<LLMProviderType, { name: string; description: string
   },
   openai: {
     name: 'OpenAI',
-    description: 'Cloud AI service (GPT-4, GPT-3.5, etc.)',
+    description: 'Cloud AI service (GPT models)',
     requiresApiKey: true,
   },
   anthropic: {
@@ -31,7 +31,12 @@ const PROVIDER_INFO: Record<LLMProviderType, { name: string; description: string
   },
   groq: {
     name: 'Groq',
-    description: 'Fast cloud inference (Llama, Mixtral, etc.)',
+    description: 'Fast cloud inference service',
+    requiresApiKey: true,
+  },
+  gemini: {
+    name: 'Google',
+    description: 'Cloud AI service (Gemini models)',
     requiresApiKey: true,
   },
   custom: {
@@ -152,6 +157,7 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled }: L
               {config.provider === 'anthropic' && 'Examples: claude-3-5-sonnet-20241022, claude-3-opus-20240229'}
               {config.provider === 'ollama' && 'Examples: llama2, mistral, codellama'}
               {config.provider === 'groq' && 'Examples: llama-3.1-70b-versatile, mixtral-8x7b-32768'}
+              {config.provider === 'gemini' && 'Examples: gemini-2.0-flash-exp, gemini-1.5-pro, gemini-1.5-flash'}
               {config.provider === 'lmstudio' && 'Use the model name from your LM Studio server'}
             </div>
           </div>
@@ -173,6 +179,7 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled }: L
                 {config.provider === 'openai' && 'Get your API key from platform.openai.com'}
                 {config.provider === 'anthropic' && 'Get your API key from console.anthropic.com'}
                 {config.provider === 'groq' && 'Get your API key from console.groq.com'}
+                {config.provider === 'gemini' && 'Get your API key from ai.google.dev'}
               </div>
             </div>
           )}

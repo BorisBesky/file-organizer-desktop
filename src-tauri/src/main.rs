@@ -6,7 +6,7 @@
 use std::fs;
 use std::path::Path;
 use tauri::api::dialog::FileDialogBuilder;
-use tauri::{command, AppHandle, Manager};
+use tauri::{command, AppHandle, Manager, CustomMenuItem, Menu, MenuItem, Submenu, WindowMenuEvent};
 use walkdir::WalkDir;
 
 #[command]
@@ -69,8 +69,76 @@ fn pick_directory(app: AppHandle) {
     });
 }
 
+fn create_menu() -> Menu {
+    let help_menu = Menu::new()
+        .add_item(CustomMenuItem::new("show_help".to_string(), "File Organizer Help"))
+        .add_native_item(MenuItem::Separator)
+        .add_item(CustomMenuItem::new("about".to_string(), "About File Organizer"));
+
+    #[cfg(target_os = "macos")]
+    {
+        Menu::new()
+            .add_submenu(Submenu::new(
+                "File Organizer",
+                Menu::new()
+                    .add_item(CustomMenuItem::new("about".to_string(), "About File Organizer"))
+                    .add_native_item(MenuItem::Separator)
+                    .add_native_item(MenuItem::Hide)
+                    .add_native_item(MenuItem::HideOthers)
+                    .add_native_item(MenuItem::ShowAll)
+                    .add_native_item(MenuItem::Separator)
+                    .add_native_item(MenuItem::Quit),
+            ))
+            .add_submenu(Submenu::new("File", Menu::new()))
+            .add_submenu(Submenu::new("Edit", Menu::new()
+                .add_native_item(MenuItem::Undo)
+                .add_native_item(MenuItem::Redo)
+                .add_native_item(MenuItem::Separator)
+                .add_native_item(MenuItem::Cut)
+                .add_native_item(MenuItem::Copy)
+                .add_native_item(MenuItem::Paste)
+                .add_native_item(MenuItem::SelectAll)
+            ))
+            .add_submenu(Submenu::new("Help", help_menu))
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        Menu::new()
+            .add_submenu(Submenu::new("File", Menu::new()
+                .add_native_item(MenuItem::Quit)
+            ))
+            .add_submenu(Submenu::new("Edit", Menu::new()
+                .add_native_item(MenuItem::Undo)
+                .add_native_item(MenuItem::Redo)
+                .add_native_item(MenuItem::Separator)
+                .add_native_item(MenuItem::Cut)
+                .add_native_item(MenuItem::Copy)
+                .add_native_item(MenuItem::Paste)
+                .add_native_item(MenuItem::SelectAll)
+            ))
+            .add_submenu(Submenu::new("Help", help_menu))
+    }
+}
+
+fn handle_menu_event(event: WindowMenuEvent) {
+    match event.menu_item_id() {
+        "show_help" => {
+            let _ = event.window().emit("show-help", ());
+        }
+        "about" => {
+            let _ = event.window().emit("show-about", ());
+        }
+        _ => {}
+    }
+}
+
 fn main() {
+    let menu = create_menu();
+    
     tauri::Builder::default()
+        .menu(menu)
+        .on_menu_event(handle_menu_event)
         .invoke_handler(tauri::generate_handler![
             read_directory,
             pick_directory,

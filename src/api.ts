@@ -1,5 +1,5 @@
 // LLM Provider Configuration Types
-export type LLMProviderType = 'lmstudio' | 'ollama' | 'openai' | 'anthropic' | 'groq' | 'custom';
+export type LLMProviderType = 'lmstudio' | 'ollama' | 'openai' | 'anthropic' | 'groq' | 'gemini' | 'custom';
 
 export interface LLMConfig {
   provider: LLMProviderType;
@@ -37,6 +37,11 @@ export const DEFAULT_CONFIGS: Record<LLMProviderType, Partial<LLMConfig>> = {
     baseUrl: 'https://api.groq.com/openai',
     model: 'llama-3.1-70b-versatile',
   },
+  gemini: {
+    provider: 'gemini',
+    baseUrl: 'https://generativelanguage.googleapis.com',
+    model: 'gemini-2.0-flash-exp',
+  },
   custom: {
     provider: 'custom',
     baseUrl: '',
@@ -53,6 +58,9 @@ function getCompletionEndpoint(config: LLMConfig): string {
       return `${base}/api/chat`;
     case 'anthropic':
       return `${base}/v1/messages`;
+    case 'gemini':
+      // Gemini uses API key in URL
+      return `${base}/v1beta/models/${config.model}:generateContent?key=${config.apiKey || ''}`;
     case 'openai':
     case 'groq':
     case 'lmstudio':
@@ -71,6 +79,8 @@ function buildHeaders(config: LLMConfig): Record<string, string> {
     if (config.provider === 'anthropic') {
       headers['x-api-key'] = config.apiKey;
       headers['anthropic-version'] = '2023-06-01';
+    } else if (config.provider === 'gemini') {
+      // Gemini uses API key in URL, not in headers
     } else {
       headers['Authorization'] = `Bearer ${config.apiKey}`;
     }
@@ -101,6 +111,21 @@ function buildRequestBody(config: LLMConfig, prompt: string, systemMessage: stri
         messages: [
           { role: 'user', content: prompt },
         ],
+      };
+    
+    case 'gemini':
+      return {
+        contents: [
+          {
+            parts: [
+              { text: `${finalSystemMessage}\n\n${prompt}` }
+            ]
+          }
+        ],
+        generationConfig: {
+          temperature: 0.2,
+          maxOutputTokens: config.maxTokens ?? 4096,
+        },
       };
     
     default: // OpenAI-compatible (openai, groq, lmstudio, custom)
@@ -173,6 +198,9 @@ function extractContent(config: LLMConfig, data: any): string {
       break;
     case 'anthropic':
       rawContent = data?.content?.[0]?.text ?? data?.content;
+      break;
+    case 'gemini':
+      rawContent = data?.candidates?.[0]?.content?.parts?.[0]?.text;
       break;
     default:
       rawContent = data?.choices?.[0]?.message?.content;

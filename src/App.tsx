@@ -3,7 +3,7 @@ import { classifyViaLLM, optimizeCategoriesViaLLM, LLMConfig, DEFAULT_CONFIGS } 
 import { invoke } from '@tauri-apps/api/tauri';
 import { listen } from '@tauri-apps/api/event';
 import { ScanState } from './types';
-import { LLMConfigPanel } from './components';
+import { LLMConfigPanel, HelpDialog, AboutDialog } from './components';
 
 function sanitizeFilename(name: string) {
   let out = name.trim().replace(/[\n\r]/g, ' ');
@@ -45,6 +45,8 @@ export default function App() {
   const [rows, setRows] = useState<Row[]>([]);
   const [progress, setProgress] = useState({ current: 0, total: 0 });
   const [statusExpanded, setStatusExpanded] = useState(true);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState(false);
   
   // Scan control state
   const [scanState, setScanState] = useState<ScanState>('idle');
@@ -66,6 +68,19 @@ export default function App() {
     };
   }, []);
 
+  useEffect(() => {
+    const unlistenHelp = listen('show-help', () => {
+      setHelpOpen(true);
+    });
+    const unlistenAbout = listen('show-about', () => {
+      setAboutOpen(true);
+    });
+    return () => {
+      unlistenHelp.then(f => f());
+      unlistenAbout.then(f => f());
+    };
+  }, []);
+
   const pickDirectory = () => {
     invoke('pick_directory');
   };
@@ -74,7 +89,7 @@ export default function App() {
     if (scanState === 'scanning') {
       scanControlRef.current.shouldPause = true;
       setScanState('paused');
-      setEvents((prev: string[]) => [...prev, 'Scan paused by user']);
+      setEvents((prev: string[]) => ['Scan paused by user', ...prev]);
     }
   };
 
@@ -82,7 +97,7 @@ export default function App() {
     if (scanState === 'paused') {
       scanControlRef.current.shouldPause = false;
       setScanState('scanning');
-      setEvents((prev: string[]) => [...prev, 'Scan resumed']);
+      setEvents((prev: string[]) => ['Scan resumed', ...prev]);
       // Continue processing from where we left off
       processRemainingFiles();
     }
@@ -92,7 +107,7 @@ export default function App() {
     if (scanState === 'scanning' || scanState === 'paused') {
       scanControlRef.current.shouldStop = true;
       setScanState('stopped');
-      setEvents((prev: string[]) => [...prev, 'Scan stopped by user']);
+      setEvents((prev: string[]) => ['Scan stopped by user', ...prev]);
       
       // Show current progress and send to LM Studio for optimization
       await finalizeScan();
@@ -125,7 +140,7 @@ export default function App() {
     
     // Automatically run optimization after scan completion/stop
     if (outRows.length > 0) {
-      setEvents((prev: string[]) => [...prev, 'Sending current results to LM Studio for optimization...']);
+      setEvents((prev: string[]) => ['Sending current results to LLM for optimization...', ...prev]);
       await optimizeCategories();
     }
   };
@@ -162,11 +177,11 @@ export default function App() {
         // ignore
       }
 
-      setEvents((prev: string[]) => [...prev, `Reading ${f} (${reason})`]);
+      setEvents((prev: string[]) => [`Reading ${f} (${reason})`, ...prev]);
       const info: any = { src: f, readable, reason };
       
       if (readable) {
-        setEvents((prev: string[]) => [...prev, `Classifying ${f}`]);
+        setEvents((prev: string[]) => [`Classifying ${f}`, ...prev]);
         let result;
         try {
           result = await classifyViaLLM({ config: llmConfig, text, originalName: splitPath(f).name, categoriesHint });
@@ -184,9 +199,9 @@ export default function App() {
         info.llm = result;
         info.dst = finalDst;
         processedFiles.push(info);
-        setEvents((prev: string[]) => [...prev, `Classified ${f} -> ${dir} => ${finalDst}`]);
+        setEvents((prev: string[]) => [`Classified ${f} -> ${dir} => ${finalDst}`, ...prev]);
       } else {
-        setEvents((prev: string[]) => [...prev, `Skipping ${f}: ${reason}`]);
+        setEvents((prev: string[]) => [`Skipping ${f}: ${reason}`, ...prev]);
         processedFiles.push(info);
       }
     }
@@ -228,12 +243,12 @@ export default function App() {
       scanControlRef.current.allFiles = processableFiles;
       setProgress({ current: 0, total: processableFiles.length });
       
-      setEvents((prev: string[]) => [...prev, `Found ${processableFiles.length} files to process`]);
+      setEvents((prev: string[]) => [`Found ${processableFiles.length} files to process`, ...prev]);
       
       // Start processing files
       await processRemainingFiles();
     } catch (error: any) {
-      setEvents((prev: string[]) => [...prev, `Error reading directory: ${error.message || String(error)}`]);
+      setEvents((prev: string[]) => [`Error reading directory: ${error.message || String(error)}`, ...prev]);
       setBusy(false);
       setScanState('idle');
     }
@@ -243,7 +258,7 @@ export default function App() {
     if (!rows.length) return;
     
     setBusy(true);
-    setEvents((prev: string[]) => [...prev, 'Analyzing directory structure for optimizations...']);
+    setEvents((prev: string[]) => ['Analyzing directory structure for optimizations...', ...prev]);
     
     // Build directory tree from current rows
     const directoryTree: { [category: string]: string[] } = {};
@@ -261,25 +276,25 @@ export default function App() {
       });
       
       if (result.optimizations && result.optimizations.length > 0) {
-        setEvents((prev: string[]) => [...prev, `Found ${result.optimizations.length} optimization suggestions:`]);
+        setEvents((prev: string[]) => [`Found ${result.optimizations.length} optimization suggestions:`, ...prev]);
         
         // Apply optimizations to rows
         const updatedRows = rows.map(row => {
           const optimization = result.optimizations.find((opt: { from: string; to: string; reason: string }) => opt.from === row.category);
           if (optimization) {
-            setEvents((prev: string[]) => [...prev, `  ${optimization.from} → ${optimization.to}: ${optimization.reason}`]);
+            setEvents((prev: string[]) => [`  ${optimization.from} → ${optimization.to}: ${optimization.reason}`, ...prev]);
             return { ...row, category: optimization.to };
           }
           return row;
         });
         
         setRows(updatedRows);
-        setEvents((prev: string[]) => [...prev, 'Applied category optimizations successfully.']);
+        setEvents((prev: string[]) => ['Applied category optimizations successfully.', ...prev]);
       } else {
-        setEvents((prev: string[]) => [...prev, 'No optimizations suggested - directory structure looks good!']);
+        setEvents((prev: string[]) => ['No optimizations suggested - directory structure looks good!', ...prev]);
       }
     } catch (e: any) {
-      setEvents((prev: string[]) => [...prev, `Failed to optimize categories: ${e?.message || String(e)}`]);
+      setEvents((prev: string[]) => [`Failed to optimize categories: ${e?.message || String(e)}`, ...prev]);
     }
     
     setBusy(false);
@@ -292,13 +307,13 @@ export default function App() {
       const to = toPath(row);
       try {
         await invoke('move_file', { from: row.src, to });
-        setEvents((prev: string[]) => [...prev, `Moved ${row.src} to ${to}`]);
+        setEvents((prev: string[]) => [`Moved ${row.src} to ${to}`, ...prev]);
       } catch (e: any) {
-        setEvents((prev: string[]) => [...prev, `Failed to move ${row.src}: ${e}`]);
+        setEvents((prev: string[]) => [`Failed to move ${row.src}: ${e}`, ...prev]);
       }
     }
     setRows([]);
-    setEvents((prev: string[]) => [...prev, 'Done.']);
+    setEvents((prev: string[]) => ['Done.', ...prev]);
     setBusy(false);
   };
 
@@ -474,9 +489,13 @@ export default function App() {
         </div>
       )}
 
-      <p className="note">
+            <p className="note">
         AI file organization assistant.
       </p>
+
+      {/* Help and About Dialogs */}
+      <HelpDialog isOpen={helpOpen} onClose={() => setHelpOpen(false)} />
+      <AboutDialog isOpen={aboutOpen} onClose={() => setAboutOpen(false)} />
     </div>
   );
 }
