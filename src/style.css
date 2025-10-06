@@ -509,8 +509,9 @@ label input[type="checkbox"] {
 }
 
 .provider-card:hover:not(:disabled) {
-  border-color: #007aff;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  border-color: #66b0ff;
+  background: #eaf6ff; /* light blue hover */
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
   transform: translateY(-1px);
 }
 
