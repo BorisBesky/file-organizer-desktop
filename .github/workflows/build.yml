@@ -39,19 +39,17 @@ jobs:
         with:
           node-version: lts/*
 
-      - name: Install Rust toolchain macos
+      - name: Install Rust toolchain
         if: matrix.platform == 'macos-latest'
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
-          targets: 'aarch64-apple-darwin, x86_64-apple-darwin'
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin, x86_64-apple-darwin' || '' }}
 
-      - name: Install Rust toolchain
-        if: matrix.platform != 'macos-latest'
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache Rust build artifacts
+      - name: rust cache
         uses: swatinem/rust-cache@v2
+        with:
+          key: ${{ runner.os }}-tauri-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Install dependencies (npm)
         run: npm install
@@ -68,5 +66,5 @@ jobs:
           # 2. Pass the workflow_dispatch inputs to the tauri-action
           tagName: ${{ github.event.inputs.tagName }}
           releaseName: ${{ github.event.inputs.releaseName }}
-          if: matrix.platform == 'macos-latest'
-          args: '--target universal-apple-darwin'
+          args: >-
+            ${{ runner.os == 'macOS' && '--target universal-apple-darwin' || '' }}
