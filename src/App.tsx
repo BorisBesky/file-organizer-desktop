@@ -181,26 +181,23 @@ export default function App() {
     }
   };
 
-  const finalizeScan = async () => {
-    const previews = scanControlRef.current.processedFiles;
-    
-    const outRows: Row[] = previews.map((p: any) => {
-      const { name, ext } = splitPath(p.src);
-      const category = p.llm ? sanitizeDirpath(p.llm.category_path || 'uncategorized') : 'uncategorized';
-      const newName = p.llm ? sanitizeFilename(p.llm.suggested_filename || name) : name;
+  const convertToRow = (p: any): Row => {
+    const { name, ext } = splitPath(p.src);
+    const category = p.llm ? sanitizeDirpath(p.llm.category_path || 'uncategorized') : 'uncategorized';
+    const newName = p.llm ? sanitizeFilename(p.llm.suggested_filename || name) : name;
 
-      return {
-        src: p.src,
-        readable: !!p.readable,
-        reason: p.reason,
-        category: category,
-        name: newName,
-        ext: ext,
-        enabled: !!p.dst,
-      };
-    });
-    
-    setRows(outRows);
+    return {
+      src: p.src,
+      readable: !!p.readable,
+      reason: p.reason,
+      category: category,
+      name: newName,
+      ext: ext,
+      enabled: !!p.dst,
+    };
+  };
+
+  const finalizeScan = async () => {
     setProgress({ current: scanControlRef.current.currentFileIndex, total: scanControlRef.current.allFiles.length });
     setBusy(false);
     setScanState('completed');
@@ -261,9 +258,17 @@ export default function App() {
         info.dst = finalDst;
         processedFiles.push(info);
         setEvents((prev: string[]) => [`Classified ${f} -> ${dir} => ${finalDst}`, ...prev]);
+        
+        // Add row to table immediately
+        const newRow = convertToRow(info);
+        setRows((prev: Row[]) => [...prev, newRow]);
       } else {
         setEvents((prev: string[]) => [`Skipping ${f}: ${reason}`, ...prev]);
         processedFiles.push(info);
+        
+        // Add skipped file to table immediately
+        const newRow = convertToRow(info);
+        setRows((prev: Row[]) => [...prev, newRow]);
       }
     }
     
