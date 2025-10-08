@@ -244,10 +244,10 @@ export default function App() {
         try {
           result = await classifyViaLLM({ config: llmConfig, text, originalName: splitPath(f).name, categoriesHint });
         } catch (e: any) {
-          result = { category_path: 'uncategorized', suggested_filename: f.replace(/\.[^/.]+$/, ''), confidence: 0, raw: { error: e?.message || String(e) } };
+          result = { category_path: 'uncategorized', suggested_filename: splitPath(f).name, confidence: 0, raw: { error: e?.message || String(e) } };
         }
         const ext = '.' + (f.split('.').pop() || '');
-        const safe = sanitizeFilename(result.suggested_filename || f.replace(/\.[^/.]+$/, ''));
+        const safe = sanitizeFilename(result.suggested_filename || splitPath(f).name);
         const dir = sanitizeDirpath(result.category_path || 'uncategorized');
         const dst = `${directory}/${dir}/${safe}${ext}`;
         let finalDst = dst;
