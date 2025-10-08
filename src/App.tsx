@@ -176,7 +176,7 @@ export default function App() {
       setScanState('stopped');
       setEvents((prev: string[]) => ['Scan stopped by user', ...prev]);
       
-      // Show current progress and send to LM Studio for optimization
+      // Show current progress
       await finalizeScan();
     }
   };
@@ -204,12 +204,6 @@ export default function App() {
     setProgress({ current: scanControlRef.current.currentFileIndex, total: scanControlRef.current.allFiles.length });
     setBusy(false);
     setScanState('completed');
-    
-    // Automatically run optimization after scan completion/stop
-    if (outRows.length > 0) {
-      setEvents((prev: string[]) => ['Sending current results to LLM for optimization...', ...prev]);
-      await optimizeCategories();
-    }
   };
 
   const processRemainingFiles = async () => {
