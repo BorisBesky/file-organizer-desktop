@@ -31,13 +31,28 @@ function splitPath(p: string) {
 type Row = { src: string; readable: boolean; reason?: string; category: string; name: string; ext: string; enabled: boolean; dst?: any };
 
 export default function App() {
-  const [llmConfig, setLlmConfig] = useState<LLMConfig>({
-    provider: 'lmstudio',
-    baseUrl: 'http://localhost:1234',
-    model: 'local-model',
-    maxTokens: 4096,
-    systemMessage: 'Return only valid JSON (no markdown), with keys: category_path, suggested_filename, confidence (0-1).',
-  });
+  // Load LLM config from localStorage or use defaults
+  const loadLlmConfig = (): LLMConfig => {
+    try {
+      const saved = localStorage.getItem('llmConfig');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return parsed;
+      }
+    } catch (error) {
+      console.error('Failed to load LLM config from localStorage:', error);
+    }
+    // Return default config if no saved config exists
+    return {
+      provider: 'lmstudio',
+      baseUrl: 'http://localhost:1234',
+      model: 'local-model',
+      maxTokens: 4096,
+      systemMessage: 'Return only valid JSON (no markdown), with keys: category_path, suggested_filename, confidence (0-1).',
+    };
+  };
+
+  const [llmConfig, setLlmConfig] = useState<LLMConfig>(loadLlmConfig());
   const [directory, setDirectory] = useState<string | null>(null);
   const [includeSubdirectories, setIncludeSubdirectories] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -59,7 +74,6 @@ export default function App() {
     category: 200,
     filename: 200,
     ext: 60,
-    proposedTo: 300,
   });
   
   const resizingColumn = useRef<string | null>(null);
@@ -126,6 +140,15 @@ export default function App() {
     used: new Set<string>(),
   });
 
+  // Save LLM config to localStorage whenever it changes
+  useEffect(() => {
+    try {
+      localStorage.setItem('llmConfig', JSON.stringify(llmConfig));
+    } catch (error) {
+      console.error('Failed to save LLM config to localStorage:', error);
+    }
+  }, [llmConfig]);
+
   useEffect(() => {
     const unlisten = listen<string>('directory-selected', (event) => {
       setDirectory(event.payload);
@@ -184,7 +207,15 @@ export default function App() {
   const convertToRow = (p: any): Row => {
     const { name, ext } = splitPath(p.src);
     const category = p.llm ? sanitizeDirpath(p.llm.category_path || 'uncategorized') : 'uncategorized';
-    const newName = p.llm ? sanitizeFilename(p.llm.suggested_filename || name) : name;
+    // Use original filename if suggested filename is empty, "unknown", not provided, or uncategorized
+    const suggestedName = p.llm?.suggested_filename;
+    const shouldUseOriginal = !suggestedName || 
+                             suggestedName.toLowerCase() === 'unknown' ||
+                             suggestedName.toLowerCase().includes('undefined') ||
+                             category.toLowerCase().includes('uncategorized');
+
+    
+    const newName = shouldUseOriginal ? name : sanitizeFilename(suggestedName);
 
     return {
       src: p.src,
@@ -592,7 +623,6 @@ export default function App() {
                     <col style={{ width: `${columnWidths.category}px` }} />
                     <col style={{ width: `${columnWidths.filename}px` }} />
                     <col style={{ width: `${columnWidths.ext}px` }} />
-                    <col style={{ width: `${columnWidths.proposedTo}px` }} />
                   </colgroup>
                   <thead>
                     <tr>
@@ -616,9 +646,6 @@ export default function App() {
                         Ext
                         <div className="resize-handle" onMouseDown={(e) => handleResizeStart(e, 'ext')} />
                       </th>
-                      <th>
-                        Proposed To
-                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -629,7 +656,6 @@ export default function App() {
                         <td><input aria-label={`Category for ${r.src}`} type="text" value={r.category} placeholder="Category" onChange={e => updateRow(i, { category: e.target.value })} /></td>
                         <td><input aria-label={`Name for ${r.src}`} type="text" value={r.name} placeholder="New filename" onChange={e => updateRow(i, { name: e.target.value })} /></td>
                         <td>{r.ext}</td>
-                        <td>{getRelativeToPath(r)}</td>
                       </tr>
                     ))}
                   </tbody>
