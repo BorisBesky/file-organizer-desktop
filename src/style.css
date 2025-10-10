@@ -233,6 +233,34 @@ th {
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
+.sortable-header {
+  transition: background-color 0.15s ease;
+  position: relative;
+}
+
+.sortable-header:hover {
+  background: #e5e5e5;
+  color: #000;
+}
+
+.sortable-header:active {
+  background: #d5d5d7;
+}
+
+/* Header checkbox styling */
+th input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: #007aff;
+  margin: 0;
+}
+
+th input[type="checkbox"]:focus {
+  outline: 2px solid #007aff;
+  outline-offset: 2px;
+}
+
 tbody tr {
   border-bottom: 1px solid #f0f0f0;
 }
@@ -498,6 +526,22 @@ label input[type="checkbox"] {
   height: 16px;
   cursor: pointer;
   accent-color: #007aff;
+}
+
+.clickable-file-path {
+  cursor: pointer;
+  color: #007aff;
+  text-decoration: underline;
+  transition: color 0.15s ease;
+}
+
+.clickable-file-path:hover {
+  color: #0051d5;
+  text-decoration: none;
+}
+
+.clickable-file-path:active {
+  color: #004bb8;
 }
 
 /* Selected directory display */

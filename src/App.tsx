@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react';
-import { classifyViaLLM, optimizeCategoriesViaLLM, LLMConfig, DEFAULT_CONFIGS } from './api';
+import { classifyViaLLM, optimizeCategoriesViaLLM, LLMConfig, DEFAULT_CONFIGS, openFile } from './api';
 import { invoke } from '@tauri-apps/api/tauri';
 import { listen } from '@tauri-apps/api/event';
 import { ScanState } from './types';
@@ -30,6 +30,9 @@ function splitPath(p: string) {
 
 type Row = { src: string; readable: boolean; reason?: string; category: string; name: string; ext: string; enabled: boolean; dst?: any };
 
+type SortField = 'source' | 'category' | 'filename' | 'extension';
+type SortDirection = 'asc' | 'desc';
+
 export default function App() {
   // Load LLM config from localStorage or use defaults
   const loadLlmConfig = (): LLMConfig => {
@@ -53,7 +56,21 @@ export default function App() {
     };
   };
 
+  // Load saved configs per provider
+  const loadProviderConfigs = (): Record<string, LLMConfig> => {
+    try {
+      const saved = localStorage.getItem('llmProviderConfigs');
+      if (saved) {
+        return JSON.parse(saved);
+      }
+    } catch (error) {
+      console.error('Failed to load provider configs from localStorage:', error);
+    }
+    return {};
+  };
+
   const [llmConfig, setLlmConfig] = useState<LLMConfig>(loadLlmConfig());
+  const [providerConfigs, setProviderConfigs] = useState<Record<string, LLMConfig>>(loadProviderConfigs());
   const [directory, setDirectory] = useState<string | null>(null);
   const [includeSubdirectories, setIncludeSubdirectories] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -63,6 +80,10 @@ export default function App() {
   const [statusExpanded, setStatusExpanded] = useState(true);
   const [helpOpen, setHelpOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
+  
+  // Sorting state
+  const [sortBy, setSortBy] = useState<SortField>('source');
+  const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   
   // Sidebar width
   const [sidebarWidth, setSidebarWidth] = useState(320);
@@ -144,11 +165,28 @@ export default function App() {
   // Save LLM config to localStorage whenever it changes
   useEffect(() => {
     try {
+      // Save current config
       localStorage.setItem('llmConfig', JSON.stringify(llmConfig));
+      
+      // Save per-provider config
+      const newProviderConfigs = {
+        ...providerConfigs,
+        [llmConfig.provider]: llmConfig
+      };
+      localStorage.setItem('llmProviderConfigs', JSON.stringify(newProviderConfigs));
+      setProviderConfigs(newProviderConfigs);
     } catch (error) {
       console.error('Failed to save LLM config to localStorage:', error);
     }
-  }, [llmConfig]);
+  }, [llmConfig, providerConfigs]);
+
+  // Function to load a provider's saved config
+  const loadProviderConfig = (provider: string) => {
+    const savedConfig = providerConfigs[provider];
+    if (savedConfig) {
+      setLlmConfig(savedConfig);
+    }
+  };
 
   useEffect(() => {
     const unlisten = listen<string>('directory-selected', (event) => {
@@ -315,6 +353,7 @@ export default function App() {
     return Array.from(set);
   }, [rows]);
 
+
   const scan = async () => {
     if (!directory) return alert('Pick a directory first');
     
@@ -462,6 +501,76 @@ export default function App() {
   
   const getRelativeToPath = (r: Row) => `${r.category}/${r.name}${r.ext}`;
 
+  // Sorting functions
+  const handleSort = (field: SortField) => {
+    if (sortBy === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(field);
+      setSortDirection('asc');
+    }
+  };
+
+  // Handle file opening
+  const handleOpenFile = async (filePath: string) => {
+    try {
+      await openFile(filePath);
+    } catch (error: any) {
+      setEvents((prev: string[]) => [`Failed to open ${filePath}: ${error.message}`, ...prev]);
+    }
+  };
+
+  const getSortedRows = (): Row[] => {
+    return [...rows].sort((a, b) => {
+      let aValue: string;
+      let bValue: string;
+
+      switch (sortBy) {
+        case 'source':
+          aValue = getRelativePath(a.src).toLowerCase();
+          bValue = getRelativePath(b.src).toLowerCase();
+          break;
+        case 'category':
+          aValue = a.category.toLowerCase();
+          bValue = b.category.toLowerCase();
+          break;
+        case 'filename':
+          aValue = a.name.toLowerCase();
+          bValue = b.name.toLowerCase();
+          break;
+        case 'extension':
+          aValue = a.ext.toLowerCase();
+          bValue = b.ext.toLowerCase();
+          break;
+        default:
+          return 0;
+      }
+
+      if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
+      if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
+  };
+
+  const getSortIcon = (field: SortField) => {
+    if (sortBy !== field) return '↕';
+    return sortDirection === 'asc' ? '↑' : '↓';
+  };
+
+  // Bulk select functions
+  const handleSelectAll = (checked: boolean) => {
+    setRows((prev: Row[]) => prev.map((r: Row) => ({ ...r, enabled: checked })));
+  };
+
+  const getSelectAllState = () => {
+    if (rows.length === 0) return { checked: false, indeterminate: false };
+    const enabledCount = rows.filter(r => r.enabled).length;
+    return {
+      checked: enabledCount === rows.length,
+      indeterminate: enabledCount > 0 && enabledCount < rows.length
+    };
+  };
+
   const testLLMConnection = async () => {
     // Simple test by sending a minimal classification request
     try {
@@ -541,6 +650,8 @@ export default function App() {
             onChange={setLlmConfig}
             onTest={testLLMConnection}
             disabled={busy}
+            providerConfigs={providerConfigs}
+            onLoadProviderConfig={loadProviderConfig}
           />
 
           {/* Directory Picker Section */}
@@ -628,37 +739,78 @@ export default function App() {
                   <thead>
                     <tr>
                       <th>
-                        Apply
+                        <input 
+                          type="checkbox" 
+                          checked={getSelectAllState().checked}
+                          ref={(input) => {
+                            if (input) input.indeterminate = getSelectAllState().indeterminate;
+                          }}
+                          onChange={(e) => handleSelectAll(e.target.checked)}
+                          aria-label="Select all files"
+                          title="Select/deselect all files"
+                        />
                         <div className="resize-handle" onMouseDown={(e) => handleResizeStart(e, 'apply')} />
                       </th>
-                      <th>
-                        Source
+                      <th 
+                        className="sortable-header" 
+                        onClick={() => handleSort('source')}
+                        style={{ cursor: 'pointer' }}
+                        title="Click to sort by source path"
+                      >
+                        Source {getSortIcon('source')}
                         <div className="resize-handle" onMouseDown={(e) => handleResizeStart(e, 'source')} />
                       </th>
-                      <th>
-                        Category
+                      <th 
+                        className="sortable-header" 
+                        onClick={() => handleSort('category')}
+                        style={{ cursor: 'pointer' }}
+                        title="Click to sort by category"
+                      >
+                        Category {getSortIcon('category')}
                         <div className="resize-handle" onMouseDown={(e) => handleResizeStart(e, 'category')} />
                       </th>
-                      <th>
-                        Filename
+                      <th 
+                        className="sortable-header" 
+                        onClick={() => handleSort('filename')}
+                        style={{ cursor: 'pointer' }}
+                        title="Click to sort by filename"
+                      >
+                        Filename {getSortIcon('filename')}
                         <div className="resize-handle" onMouseDown={(e) => handleResizeStart(e, 'filename')} />
                       </th>
-                      <th>
-                        Ext
+                      <th 
+                        className="sortable-header" 
+                        onClick={() => handleSort('extension')}
+                        style={{ cursor: 'pointer' }}
+                        title="Click to sort by extension"
+                      >
+                        Ext {getSortIcon('extension')}
                         <div className="resize-handle" onMouseDown={(e) => handleResizeStart(e, 'ext')} />
                       </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {rows.map((r: Row, i: number) => (
-                      <tr key={i}>
-                        <td><input aria-label={`Select ${r.src}`} type="checkbox" checked={!!r.enabled} onChange={e => updateRow(i, { enabled: e.target.checked })} /></td>
-                        <td><code>{getRelativePath(r.src)}</code>{!r.enabled && <div className="muted">{r.reason || ''}</div>}</td>
-                        <td><input aria-label={`Category for ${r.src}`} type="text" value={r.category} placeholder="Category" onChange={e => updateRow(i, { category: e.target.value })} /></td>
-                        <td><input aria-label={`Name for ${r.src}`} type="text" value={r.name} placeholder="New filename" onChange={e => updateRow(i, { name: e.target.value })} /></td>
-                        <td>{r.ext}</td>
-                      </tr>
-                    ))}
+                    {getSortedRows().map((r: Row, i: number) => {
+                      // Find the original index in the unsorted array for updates
+                      const originalIndex = rows.findIndex(row => row.src === r.src);
+                      return (
+                        <tr key={originalIndex}>
+                          <td><input aria-label={`Select ${r.src}`} type="checkbox" checked={!!r.enabled} onChange={e => updateRow(originalIndex, { enabled: e.target.checked })} /></td>
+                          <td>
+                            <code 
+                              className="clickable-file-path" 
+                              onClick={() => handleOpenFile(r.src)}
+                              title="Click to open file"
+                            >
+                              {getRelativePath(r.src)}
+                            </code>
+                          </td>
+                          <td><input aria-label={`Category for ${r.src}`} type="text" value={r.category} placeholder="Category" onChange={e => updateRow(originalIndex, { category: e.target.value })} /></td>
+                          <td><input aria-label={`Name for ${r.src}`} type="text" value={r.name} placeholder="New filename" onChange={e => updateRow(originalIndex, { name: e.target.value })} /></td>
+                          <td>{r.ext}</td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

@@ -140,6 +140,37 @@ fn pick_directory(app: AppHandle) {
     });
 }
 
+#[tauri::command]
+async fn open_file(path: String) -> Result<(), String> {
+    use std::process::Command;
+    
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("open")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| format!("Failed to open file: {}", e))?;
+    }
+    
+    #[cfg(target_os = "windows")]
+    {
+        Command::new("cmd")
+            .args(["/C", "start", "", &path])
+            .spawn()
+            .map_err(|e| format!("Failed to open file: {}", e))?;
+    }
+    
+    #[cfg(target_os = "linux")]
+    {
+        Command::new("xdg-open")
+            .arg(&path)
+            .spawn()
+            .map_err(|e| format!("Failed to open file: {}", e))?;
+    }
+    
+    Ok(())
+}
+
 fn create_menu() -> Menu {
     let help_menu = Menu::new()
         .add_item(CustomMenuItem::new("show_help".to_string(), "File Organizer Help"))
@@ -216,7 +247,8 @@ fn main() {
             read_file_content,
             move_file,
             http_request,
-            save_diagnostic_logs
+            save_diagnostic_logs,
+            open_file
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

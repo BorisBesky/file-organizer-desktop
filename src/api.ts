@@ -454,6 +454,15 @@ ${treeText}`;
   return safeParseJson(content, () => ({ optimizations: [] }));
 }
 
+// Open a file using the operating system's default application
+export async function openFile(path: string): Promise<void> {
+  try {
+    await invoke('open_file', { path });
+  } catch (error: any) {
+    throw new Error(`Failed to open file: ${error.message || String(error)}`);
+  }
+}
+
 // Backward compatibility wrapper for LM Studio
 export async function optimizeCategoriesViaLMStudio(opts: {
   baseUrl: string,

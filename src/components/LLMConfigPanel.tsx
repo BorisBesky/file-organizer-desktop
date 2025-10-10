@@ -6,6 +6,8 @@ interface LLMConfigPanelProps {
   onChange: (config: LLMConfig) => void;
   onTest?: () => Promise<void>;
   disabled?: boolean;
+  providerConfigs?: Record<string, LLMConfig>;
+  onLoadProviderConfig?: (provider: string) => void;
 }
 
 const PROVIDER_INFO: Record<LLMProviderType, { name: string; description: string; requiresApiKey: boolean }> = {
@@ -46,7 +48,7 @@ const PROVIDER_INFO: Record<LLMProviderType, { name: string; description: string
   },
 };
 
-export default function LLMConfigPanel({ config, onChange, onTest, disabled }: LLMConfigPanelProps) {
+export default function LLMConfigPanel({ config, onChange, onTest, disabled, providerConfigs = {}, onLoadProviderConfig }: LLMConfigPanelProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [advancedExpanded, setAdvancedExpanded] = useState(false);
   const [availableModels, setAvailableModels] = useState<string[]>([]);
@@ -67,14 +69,23 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled }: L
   const currentProviderInfo = PROVIDER_INFO[config.provider];
 
   const handleProviderChange = (provider: LLMProviderType) => {
-    const defaultConfig = DEFAULT_CONFIGS[provider];
-    onChange({
-      ...config,
-      provider,
-      baseUrl: defaultConfig.baseUrl || config.baseUrl,
-      model: defaultConfig.model || config.model,
-      apiKey: provider === config.provider ? config.apiKey : undefined,
-    });
+    // Check if we have a saved config for this provider
+    const savedConfig = providerConfigs[provider];
+    
+    if (savedConfig && onLoadProviderConfig) {
+      // Load the saved config for this provider
+      onLoadProviderConfig(provider);
+    } else {
+      // Use default config for this provider
+      const defaultConfig = DEFAULT_CONFIGS[provider];
+      onChange({
+        ...config,
+        provider,
+        baseUrl: defaultConfig.baseUrl || config.baseUrl,
+        model: defaultConfig.model || config.model,
+        apiKey: provider === config.provider ? config.apiKey : undefined,
+      });
+    }
   };
 
   // Fetch available local models when provider or baseUrl changes
@@ -161,7 +172,12 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled }: L
                 })}
               </select>
             </label>
-            <div className="config-hint">{currentProviderInfo.description}</div>
+            <div className="config-hint">
+              {currentProviderInfo.description}
+              {providerConfigs[config.provider] && (
+                <span style={{ color: '#007aff', fontWeight: '500' }}> • Saved configuration</span>
+              )}
+            </div>
           </div>
 
           {/* Configuration Fields */}
