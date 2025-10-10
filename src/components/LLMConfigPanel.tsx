@@ -270,6 +270,22 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled }: L
               </div>
               <div className="config-section">
                 <label className="config-label">
+                  Max Text Length
+                  <input
+                    type="number"
+                    className="config-input"
+                    value={config.maxTextLength || ''}
+                    onChange={(e) => onChange({ ...config, maxTextLength: e.target.value ? parseInt(e.target.value, 10) : undefined })}
+                    placeholder="e.g., 4096"
+                    disabled={disabled}
+                  />
+                </label>
+                <div className="config-hint">
+                  Maximum characters to send to LLM for file classification
+                </div>
+              </div>
+              <div className="config-section">
+                <label className="config-label">
                   System Message
                   <textarea
                     className="config-textarea"

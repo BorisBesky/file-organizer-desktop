@@ -34,6 +34,7 @@ export interface LLMConfig {
   apiKey?: string; // Optional for local providers
   model: string;
   maxTokens?: number;
+  maxTextLength?: number; // Maximum characters to send to LLM for classification
   systemMessage?: string;
   customHeaders?: Record<string, string>;
 }
@@ -298,7 +299,8 @@ export async function classifyViaLLM(opts: {
     "You are a file organizer. Given the text content of a file, 1) classify it into a category path with up to 3 levels like 'medical/bills' or 'finance/taxes'. 2) suggest a concise filename base (no extension) that includes provider/company and date if present. Reply in strict JSON with keys: category_path, suggested_filename, confidence (0-1).";
 
   const hint = categoriesHint?.length ? `\n\nExisting categories (prefer one of these if appropriate):\n- ${categoriesHint.join('\n- ')}` : '';
-  const prompt = `${promptTemplate}\n\nOriginal filename: ${originalName}\nContent (truncated to 4000 chars):\n${text.slice(0, 4000)}${hint}`;
+  const maxTextLength = config.maxTextLength || 4096;
+  const prompt = `${promptTemplate}\n\nOriginal filename: ${originalName}\nContent (truncated to ${maxTextLength} chars):\n${text.slice(0, maxTextLength)}${hint}`;
 
   const systemMessage = config.systemMessage || 'Return only valid JSON (no markdown), with keys: category_path, suggested_filename, confidence (0-1).';
   

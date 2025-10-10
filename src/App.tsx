@@ -48,6 +48,7 @@ export default function App() {
       baseUrl: 'http://localhost:1234',
       model: 'local-model',
       maxTokens: 4096,
+      maxTextLength: 4096,
       systemMessage: 'Return only valid JSON (no markdown), with keys: category_path, suggested_filename, confidence (0-1).',
     };
   };
