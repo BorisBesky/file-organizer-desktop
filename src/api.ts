@@ -26,7 +26,25 @@ async function tauriFetch(url: string, options: {
 }
 
 // LLM Provider Configuration Types
-export type LLMProviderType = 'lmstudio' | 'ollama' | 'openai' | 'anthropic' | 'groq' | 'gemini' | 'custom';
+export type LLMProviderType =
+  | 'lmstudio'
+  | 'ollama'
+  | 'openai'
+  | 'anthropic'
+  | 'groq'
+  | 'gemini'
+  | 'custom'
+  | 'embedded';
+
+export interface EmbeddedLLMOptions {
+  modelPath: string;
+  contextLength?: number;
+  gpuLayers?: number;
+  seed?: number;
+  temperature?: number;
+  topP?: number;
+  maxTokens?: number;
+}
 
 export interface LLMConfig {
   provider: LLMProviderType;
@@ -37,6 +55,7 @@ export interface LLMConfig {
   maxTextLength?: number; // Maximum characters to send to LLM for classification
   systemMessage?: string;
   customHeaders?: Record<string, string>;
+  embeddedOptions?: EmbeddedLLMOptions;
 }
 
 export const DEFAULT_CONFIGS: Record<LLMProviderType, Partial<LLMConfig>> = {
@@ -75,7 +94,243 @@ export const DEFAULT_CONFIGS: Record<LLMProviderType, Partial<LLMConfig>> = {
     baseUrl: '',
     model: '',
   },
+  embedded: {
+    provider: 'embedded',
+    baseUrl: 'embedded://local',
+    model: 'qwen2.5-0.5b-instruct',
+    embeddedOptions: {
+      modelPath: '',
+      contextLength: 512,  // Small context for single-file classification (not accumulating)
+      gpuLayers: 999,      // Offload all layers to GPU (use 999 for "all available")
+      maxTokens: 150,      // Enough for JSON response with category/filename
+      temperature: 0.2,
+      topP: 0.9,
+    },
+    maxTokens: 150,
+  },
 };
+
+export interface EmbeddedDownloadState {
+  id: string;
+  url: string;
+  target_path: string;
+  bytes_downloaded: number;
+  total_bytes: number | null;
+  status: 'pending' | 'in_progress' | 'completed' | 'failed';
+  error?: string | null;
+}
+
+export interface EmbeddedServiceStatus {
+  base_url: string;
+  ready: boolean;
+  model?: string | null;
+  uptime_s: number;
+  downloads: EmbeddedDownloadState[];
+}
+
+export interface EmbeddedLoadResponse {
+  loaded: boolean;
+  model_path: string;
+  stats: {
+    load_ms: number;
+    context_length?: number | null;
+  };
+}
+
+export interface EmbeddedInferResponse {
+  content: string;
+  prompt_tokens: number;
+  completion_tokens: number;
+  latency_ms: number;
+}
+
+export async function getEmbeddedLLMStatus(): Promise<EmbeddedServiceStatus | null> {
+  try {
+    const status = await invoke<EmbeddedServiceStatus>('embedded_llm_service_status');
+    return status;
+  } catch (error) {
+    debugLogger.warn('EMBEDDED_STATUS', 'Failed to fetch embedded LLM status', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return null;
+  }
+}
+
+export async function loadEmbeddedModel(options: EmbeddedLLMOptions): Promise<EmbeddedLoadResponse> {
+  if (!options.modelPath) {
+    throw new Error('Embedded model path is required');
+  }
+
+  const payload: Record<string, unknown> = {
+    model_path: options.modelPath,
+  };
+
+  if (options.contextLength !== undefined) {
+    payload.context_length = options.contextLength;
+  }
+  if (options.gpuLayers !== undefined) {
+    payload.gpu_layers = options.gpuLayers;
+  }
+  if (options.seed !== undefined) {
+    payload.seed = options.seed;
+  }
+
+  return invoke<EmbeddedLoadResponse>('embedded_llm_load', { config: payload });
+}
+
+export async function inferEmbeddedModel(options: {
+  prompt: string;
+  temperature?: number;
+  topP?: number;
+  maxTokens?: number;
+}): Promise<EmbeddedInferResponse> {
+  const payload: Record<string, unknown> = {
+    prompt: options.prompt,
+  };
+
+  if (options.temperature !== undefined) {
+    payload.temperature = options.temperature;
+  }
+  if (options.topP !== undefined) {
+    payload.top_p = options.topP;
+  }
+  if (options.maxTokens !== undefined) {
+    payload.max_tokens = options.maxTokens;
+  }
+
+  return invoke<EmbeddedInferResponse>('embedded_llm_infer', { args: payload });
+}
+
+export interface EmbeddedDownloadRequest {
+  url: string;
+  targetName?: string;
+  sha256?: string;
+}
+
+export interface EmbeddedDownloadResponse {
+  id: string;
+  started: boolean;
+}
+
+export async function startEmbeddedDownload(options: EmbeddedDownloadRequest): Promise<EmbeddedDownloadResponse> {
+  return invoke<EmbeddedDownloadResponse>('embedded_llm_download', {
+    request: {
+      url: options.url,
+      target_name: options.targetName,
+      sha256: options.sha256,
+    },
+  });
+}
+
+// Cache for last loaded model path to avoid redundant checks
+let lastLoadedModelPath: string | null = null;
+
+// Export function to clear the cache when switching providers/models
+export function clearEmbeddedModelCache(): void {
+  lastLoadedModelPath = null;
+  debugLogger.info('EMBEDDED_SERVICE', 'Cleared embedded model cache');
+}
+
+async function ensureEmbeddedModelLoaded(config: LLMConfig): Promise<EmbeddedLLMOptions> {
+  const embedded = config.embeddedOptions;
+  if (!embedded || !embedded.modelPath) {
+    throw new Error('Embedded provider requires a model path');
+  }
+
+  // Normalize paths for comparison (resolve to absolute paths and normalize separators)
+  const normalizeModelPath = (path: string | null | undefined): string => {
+    if (!path) return '';
+    // Remove trailing slashes and normalize path separators
+    return path.trim().replace(/\\/g, '/').replace(/\/+$/, '');
+  };
+  
+  const configModelPath = normalizeModelPath(embedded.modelPath);
+  
+  // Fast path: if we've already loaded this exact model path, skip the status check
+  if (lastLoadedModelPath && lastLoadedModelPath === configModelPath) {
+    debugLogger.debug('EMBEDDED_SERVICE', 'Model already loaded (cached), skipping check', {
+      modelPath: embedded.modelPath,
+    });
+    return embedded;
+  }
+
+  // Check actual status from backend
+  const status = await getEmbeddedLLMStatus();
+  const statusModelPath = normalizeModelPath(status?.model);
+  
+  debugLogger.info('EMBEDDED_CHECK', 'Checking embedded model status', {
+    statusReady: status?.ready,
+    statusModelPath,
+    configModelPath,
+    pathsMatch: statusModelPath === configModelPath,
+    needsLoad: !status || !status.ready || statusModelPath !== configModelPath,
+    cachedPath: lastLoadedModelPath,
+  });
+  
+  if (!status || !status.ready || statusModelPath !== configModelPath) {
+    debugLogger.info('EMBEDDED_SERVICE', 'Loading embedded model', {
+      reason: !status ? 'no status' : !status.ready ? 'not ready' : 'path mismatch',
+      modelPath: embedded.modelPath,
+      contextLength: embedded.contextLength,
+      gpuLayers: embedded.gpuLayers,
+    });
+
+    try {
+      await loadEmbeddedModel(embedded);
+      // Update cache after successful load
+      lastLoadedModelPath = configModelPath;
+      debugLogger.info('EMBEDDED_SERVICE', 'Model loaded successfully', {
+        modelPath: embedded.modelPath,
+      });
+    } catch (error: any) {
+      const message = error?.message || String(error);
+      debugLogger.error('EMBEDDED_SERVICE', 'Failed to load embedded model', { message });
+      throw new Error(`Failed to load embedded model: ${message}`);
+    }
+  } else {
+    // Model is already loaded in backend, update our cache
+    lastLoadedModelPath = configModelPath;
+    debugLogger.debug('EMBEDDED_SERVICE', 'Model already loaded in backend, skipping load', {
+      modelPath: embedded.modelPath,
+    });
+  }
+
+  return embedded;
+}
+
+async function runEmbeddedCompletion(
+  config: LLMConfig,
+  prompt: string,
+  overrides?: { temperature?: number; topP?: number; maxTokens?: number },
+): Promise<EmbeddedInferResponse> {
+  const embedded = await ensureEmbeddedModelLoaded(config);
+  const temperature = overrides?.temperature ?? embedded.temperature ?? 0.2;
+  const topP = overrides?.topP ?? embedded.topP;
+  const maxTokens = overrides?.maxTokens ?? embedded.maxTokens ?? config.maxTokens ?? 256;
+
+  // Limit prompt length to prevent context overflow
+  // Using conservative estimate: ~3 chars per token
+  const contextLength = embedded.contextLength ?? 512;
+  const maxPromptChars = Math.min(contextLength * 3, 4096);
+  const truncatedPrompt = prompt.length > maxPromptChars 
+    ? prompt.substring(0, maxPromptChars)
+    : prompt;
+
+  if (prompt.length > maxPromptChars) {
+    debugLogger.warn('EMBEDDED_LLM', 'Prompt truncated', {
+      originalLength: prompt.length,
+      truncatedLength: truncatedPrompt.length,
+      contextLength,
+    });
+  }
+
+  return inferEmbeddedModel({
+    prompt: truncatedPrompt,
+    temperature,
+    topP,
+    maxTokens,
+  });
+}
 
 // Helper functions for multi-provider support
 function getCompletionEndpoint(config: LLMConfig): string {
@@ -303,6 +558,36 @@ export async function classifyViaLLM(opts: {
   const prompt = `${promptTemplate}\n\nOriginal filename: ${originalName}\nContent (truncated to ${maxTextLength} chars):\n${text.slice(0, maxTextLength)}${hint}`;
 
   const systemMessage = config.systemMessage || 'Return only valid JSON (no markdown), with keys: category_path, suggested_filename, confidence (0-1).';
+  const fallback = () => ({
+    category_path: 'uncategorized',
+    suggested_filename: originalName.replace(/\.[^/.]+$/, ''),
+    confidence: 0,
+  });
+
+  if (config.provider === 'embedded') {
+    const combinedPrompt = `${systemMessage}\n\n${prompt}`;
+    debugLogger.info('EMBEDDED_LLM', 'Running embedded classification', {
+      modelPath: config.embeddedOptions?.modelPath,
+      promptLength: combinedPrompt.length,
+    });
+
+    const result = await runEmbeddedCompletion(config, combinedPrompt, {
+      temperature: config.embeddedOptions?.temperature,
+      topP: config.embeddedOptions?.topP,
+      maxTokens: config.maxTokens ?? config.embeddedOptions?.maxTokens,
+    });
+
+    const parsed = safeParseJson(result.content, fallback);
+    return {
+      ...parsed,
+      raw: {
+        provider: 'embedded',
+        prompt_tokens: result.prompt_tokens,
+        completion_tokens: result.completion_tokens,
+        latency_ms: result.latency_ms,
+      },
+    };
+  }
   
   const endpoint = getCompletionEndpoint(config);
   const headers = buildHeaders(config);
@@ -371,11 +656,7 @@ export async function classifyViaLLM(opts: {
   }
 
   const content = extractContent(config, data);
-  return safeParseJson(content, () => ({
-    category_path: 'uncategorized',
-    suggested_filename: originalName.replace(/\.[^/.]+$/, ''),
-    confidence: 0,
-  }));
+  return safeParseJson(content, fallback);
 }
 
 // Backward compatibility wrapper for LM Studio
@@ -422,6 +703,16 @@ Current directory structure:
 ${treeText}`;
 
   const systemMessage = config.systemMessage || 'Return only valid JSON (no markdown), with key "optimizations" containing an array of optimization suggestions.';
+
+  if (config.provider === 'embedded') {
+    const combinedPrompt = `${systemMessage}\n\n${promptTemplate}`;
+    const result = await runEmbeddedCompletion(config, combinedPrompt, {
+      temperature: config.embeddedOptions?.temperature,
+      topP: config.embeddedOptions?.topP,
+      maxTokens: config.maxTokens ?? config.embeddedOptions?.maxTokens,
+    });
+    return safeParseJson(result.content, () => ({ optimizations: [] }));
+  }
   
   const endpoint = getCompletionEndpoint(config);
   const headers = buildHeaders(config);

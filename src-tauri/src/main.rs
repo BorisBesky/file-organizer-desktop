@@ -4,11 +4,19 @@
 )]
 
 use std::fs;
-use std::path::Path;
 use std::io::Write;
+use std::path::Path;
 use tauri::api::dialog::FileDialogBuilder;
-use tauri::{command, AppHandle, Manager, CustomMenuItem, Menu, MenuItem, Submenu, WindowMenuEvent};
+use tauri::{command, AppHandle, CustomMenuItem, Manager, Menu, MenuItem, Submenu, WindowMenuEvent};
 use walkdir::WalkDir;
+
+use serde::Serialize;
+
+mod embedded_llm;
+mod embedded_llm_service;
+mod process_manager;
+
+use embedded_llm::{EmbeddedInferenceArgs, EmbeddedModelConfig};
 
 #[command]
 async fn read_directory(path: String, include_subdirectories: bool) -> Result<Vec<String>, String> {
@@ -171,6 +179,57 @@ async fn open_file(path: String) -> Result<(), String> {
     Ok(())
 }
 
+#[derive(Debug, Clone, Serialize)]
+struct EmbeddedServiceStatus {
+    base_url: String,
+    ready: bool,
+    model: Option<String>,
+    uptime_s: u64,
+    downloads: Vec<embedded_llm_service::DownloadState>,
+}
+
+#[command]
+async fn embedded_llm_service_status() -> Result<EmbeddedServiceStatus, String> {
+    let snapshot = process_manager::snapshot()
+        .await
+        .map_err(|err| err.to_string())?;
+
+    Ok(EmbeddedServiceStatus {
+        base_url: snapshot.base_url,
+        ready: snapshot.status.ready,
+        model: snapshot.status.model,
+        uptime_s: snapshot.status.uptime_s,
+        downloads: snapshot.status.downloads,
+    })
+}
+
+#[command]
+async fn embedded_llm_load(
+    config: EmbeddedModelConfig,
+) -> Result<embedded_llm_service::LoadResponse, String> {
+    process_manager::load_model(config)
+        .await
+        .map_err(|err| err.to_string())
+}
+
+#[command]
+async fn embedded_llm_infer(
+    args: EmbeddedInferenceArgs,
+) -> Result<embedded_llm_service::InferResponse, String> {
+    process_manager::infer(args)
+        .await
+        .map_err(|err| err.to_string())
+}
+
+#[command]
+async fn embedded_llm_download(
+    request: embedded_llm_service::DownloadRequest,
+) -> Result<embedded_llm_service::DownloadResponse, String> {
+    process_manager::download_model(request)
+        .await
+        .map_err(|err| err.to_string())
+}
+
 fn create_menu() -> Menu {
     let help_menu = Menu::new()
         .add_item(CustomMenuItem::new("show_help".to_string(), "File Organizer Help"))
@@ -248,7 +307,11 @@ fn main() {
             move_file,
             http_request,
             save_diagnostic_logs,
-            open_file
+            open_file,
+            embedded_llm_service_status,
+            embedded_llm_load,
+            embedded_llm_infer,
+            embedded_llm_download
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
