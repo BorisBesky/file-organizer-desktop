@@ -189,7 +189,7 @@ a = Analysis(
     ['mlx_server.py'],
     pathex=[],
     binaries=mlx_binaries + tokenizers_binaries_tuple + transformers_binaries_tuple,
-    datas=mlx_datas + certifi_datas + tokenizers_datas_tuple + transformers_datas_tuple,
+    datas=mlx_datas + certifi_datas + tokenizers_datas_tuple + transformers_datas_tuple + [('version.py', '.')],
     hiddenimports=base_hiddenimports + mlx_model_imports + transformers_model_imports + tokenizers_hiddenimports + transformers_hiddenimports,
     hookspath=[],
     hooksconfig={},

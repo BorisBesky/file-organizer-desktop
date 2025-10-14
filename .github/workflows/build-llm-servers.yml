@@ -1,0 +1,204 @@
+name: "Build LLM Servers"
+
+on:
+  push:
+    # Trigger when a new tag matching "llm-v*" is pushed
+    tags:
+      - 'llm-v*'
+  
+  # Allow manual trigger from the GitHub Actions tab
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version number (e.g., 1.0.0)'
+        required: true
+        default: '1.0.0'
+      platforms:
+        description: 'Platforms to build (comma-separated: windows,linux,macos or "all")'
+        required: true
+        default: 'all'
+
+jobs:
+  build-windows-ollama:
+    runs-on: windows-latest
+    if: |
+        github.event_name == 'push' || 
+        contains(github.event.inputs.platforms, 'all') || 
+        contains(github.event.inputs.platforms, 'windows')
+    
+        steps:
+        - name: Checkout repository
+            uses: actions/checkout@v4
+        
+        - name: Setup Python
+            uses: actions/setup-python@v5
+            with:
+            python-version: '3.11'
+        
+        - name: Install dependencies
+            run: |
+            python -m pip install --upgrade pip
+            pip install pyinstaller
+            pip install llama-cpp-python
+            pip install fastapi uvicorn pydantic huggingface-hub
+            
+        - name: Update version if manually triggered
+            if: github.event_name == 'workflow_dispatch'
+            shell: bash
+            run: |
+            VERSION="${{ github.event.inputs.version }}"
+            BUILD_DATE=$(date +%Y-%m-%d)
+            echo "Updating version to $VERSION (build date: $BUILD_DATE)"
+            cat > llm-server/windows/ollama/version.py << EOF
+            """Version information for ollama_server."""
+            
+            __version__ = "$VERSION"
+            __build_date__ = "$BUILD_DATE"
+            EOF
+        
+        - name: Build with PyInstaller
+            working-directory: llm-server/windows/ollama
+            run: pyinstaller ollama_server.spec
+        
+        - name: Package artifact
+            working-directory: llm-server/windows/ollama/dist
+            run: |
+            Compress-Archive -Path ollama_server -DestinationPath ollama_server-windows.zip
+        
+        - name: Upload artifact
+            uses: actions/upload-artifact@v4
+            with:
+            name: ollama-server-windows
+            path: llm-server/windows/ollama/dist/ollama_server-windows.zip
+            retention-days: 30
+
+  build-linux-ollama:
+    runs-on: ubuntu-22.04
+    if: |
+        github.event_name == 'push' || 
+        contains(github.event.inputs.platforms, 'all') || 
+        contains(github.event.inputs.platforms, 'linux')
+        steps:
+        - name: Checkout repository
+            uses: actions/checkout@v4
+        
+        - name: Setup Python
+            uses: actions/setup-python@v5
+            with:
+            python-version: '3.11'
+        
+        - name: Install dependencies
+            run: |
+            python -m pip install --upgrade pip
+            pip install pyinstaller
+            pip install llama-cpp-python
+            pip install fastapi uvicorn pydantic huggingface-hub
+        
+        - name: Update version if manually triggered
+            if: github.event_name == 'workflow_dispatch'
+            run: |
+            VERSION="${{ github.event.inputs.version }}"
+            BUILD_DATE=$(date +%Y-%m-%d)
+            echo "Updating version to $VERSION (build date: $BUILD_DATE)"
+            cat > llm-server/windows/ollama/version.py << EOF
+            """Version information for ollama_server."""
+            
+            __version__ = "$VERSION"
+            __build_date__ = "$BUILD_DATE"
+            EOF
+        
+        - name: Build with PyInstaller
+            working-directory: llm-server/linux/ollama
+            run: pyinstaller ollama_server.spec
+        
+        - name: Package artifact
+            working-directory: llm-server/linux/ollama/dist
+            run: |
+            tar -czf ollama_server-linux.tar.gz ollama_server
+        
+        - name: Upload artifact
+            uses: actions/upload-artifact@v4
+            with:
+            name: ollama-server-linux
+            path: llm-server/linux/ollama/dist/ollama_server-linux.tar.gz
+            retention-days: 30
+
+  build-macos-mlx:
+    runs-on: macos-latest
+    
+    if: |
+        github.event_name == 'push' || 
+        contains(github.event.inputs.platforms, 'all') || 
+        contains(github.event.inputs.platforms, 'macos')
+    
+        steps:
+        - name: Checkout repository
+            uses: actions/checkout@v4
+        
+        - name: Setup Python
+            uses: actions/setup-python@v5
+            with:
+            python-version: '3.11'
+        
+        - name: Install dependencies
+            run: |
+            python -m pip install --upgrade pip
+            pip install pyinstaller
+            pip install mlx mlx-lm
+            pip install transformers tokenizers huggingface-hub
+        
+        - name: Update version if manually triggered
+            if: github.event_name == 'workflow_dispatch'
+            run: |
+            VERSION="${{ github.event.inputs.version }}"
+            BUILD_DATE=$(date +%Y-%m-%d)
+            echo "Updating version to $VERSION (build date: $BUILD_DATE)"
+            cat > llm-server/macos/mlx/version.py << EOF
+            """Version information for mlx_server."""
+            
+            __version__ = "$VERSION"
+            __build_date__ = "$BUILD_DATE"
+            EOF
+        
+        - name: Build with PyInstaller
+            working-directory: llm-server/macos/mlx
+            run: pyinstaller mlx_server.spec
+        
+        - name: Package artifact
+            working-directory: llm-server/macos/mlx/dist
+            run: |
+            tar -czf mlx_server-macos.tar.gz mlx_server
+        
+        - name: Upload artifact
+            uses: actions/upload-artifact@v4
+            with:
+            name: mlx-server-macos
+            path: llm-server/macos/mlx/dist/mlx_server-macos.tar.gz
+            retention-days: 30
+
+  create-release:
+    needs: [build-windows-ollama, build-linux-ollama, build-macos-mlx]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/llm-v')
+    permissions:
+      contents: write
+    
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            artifacts/ollama-server-windows/ollama_server-windows.zip
+            artifacts/ollama-server-linux/ollama_server-linux.tar.gz
+            artifacts/mlx-server-macos/mlx_server-macos.tar.gz
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
