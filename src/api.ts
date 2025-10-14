@@ -37,6 +37,13 @@ export interface LLMConfig {
   maxTextLength?: number; // Maximum characters to send to LLM for classification
   systemMessage?: string;
   customHeaders?: Record<string, string>;
+  supportsVision?: boolean; // Whether the model supports image inputs
+}
+
+export interface FileContent {
+  text?: string;
+  image_base64?: string;
+  mime_type?: string;
 }
 
 export const DEFAULT_CONFIGS: Record<LLMProviderType, Partial<LLMConfig>> = {
@@ -165,59 +172,123 @@ function buildHeaders(config: LLMConfig): Record<string, string> {
   return headers;
 }
 
-function buildRequestBody(config: LLMConfig, prompt: string, systemMessage: string): any {
+function buildRequestBody(config: LLMConfig, prompt: string, systemMessage: string, imageData?: { base64: string; mimeType: string }): any {
   const finalSystemMessage = config.systemMessage ?? systemMessage;
 
   switch (config.provider) {
     case 'ollama':
-      return {
-        model: config.model,
-        messages: [
-          { role: 'system', content: finalSystemMessage },
-          { role: 'user', content: prompt },
-        ],
-        stream: false,
-      };
+      {
+        const userMessage: any = { role: 'user', content: prompt };
+        
+        // Add image if present and model supports vision
+        if (imageData && config.supportsVision) {
+          userMessage.images = [imageData.base64];
+        }
+        
+        return {
+          model: config.model,
+          messages: [
+            { role: 'system', content: finalSystemMessage },
+            userMessage,
+          ],
+          stream: false,
+        };
+      }
     
     case 'anthropic':
-      return {
-        model: config.model,
-        max_tokens: config.maxTokens ?? 4096,
-        system: finalSystemMessage,
-        messages: [
-          { role: 'user', content: prompt },
-        ],
-      };
+      {
+        const contentParts: any[] = [];
+        
+        // Add image first if present and model supports vision
+        if (imageData && config.supportsVision) {
+          contentParts.push({
+            type: 'image',
+            source: {
+              type: 'base64',
+              media_type: imageData.mimeType,
+              data: imageData.base64,
+            },
+          });
+        }
+        
+        // Add text prompt
+        contentParts.push({
+          type: 'text',
+          text: prompt,
+        });
+        
+        return {
+          model: config.model,
+          max_tokens: config.maxTokens ?? 4096,
+          system: finalSystemMessage,
+          messages: [
+            { role: 'user', content: contentParts },
+          ],
+        };
+      }
     
     case 'gemini':
-      return {
-        contents: [
-          {
-            parts: [
-              { text: `${finalSystemMessage}\n\n${prompt}` }
-            ]
-          }
-        ],
-        generationConfig: {
-          temperature: 0.2,
-          maxOutputTokens: config.maxTokens ?? 4096,
-        },
-      };
+      {
+        const parts: any[] = [];
+        
+        // Add image if present and model supports vision
+        if (imageData && config.supportsVision) {
+          parts.push({
+            inline_data: {
+              mime_type: imageData.mimeType,
+              data: imageData.base64,
+            },
+          });
+        }
+        
+        // Add text (combine system message and prompt for Gemini)
+        parts.push({ text: `${finalSystemMessage}\n\n${prompt}` });
+        
+        return {
+          contents: [
+            { parts }
+          ],
+          generationConfig: {
+            temperature: 0.2,
+            maxOutputTokens: config.maxTokens ?? 4096,
+          },
+        };
+      }
     
     default: // OpenAI-compatible (openai, groq, lmstudio, custom)
-      const body: Record<string, any> = {
-        model: config.model,
-        messages: [
-          { role: 'system', content: finalSystemMessage },
-          { role: 'user', content: prompt },
-        ],
-        temperature: 0.2,
-        stream: false,
-      };
-      if (config.provider !== 'lmstudio') {
-        body.max_tokens = config.maxTokens ?? 4096;
+      {
+        const userContent: any[] = [];
+        
+        // Add image if present and model supports vision
+        if (imageData && config.supportsVision) {
+          userContent.push({
+            type: 'image_url',
+            image_url: {
+              url: `data:${imageData.mimeType};base64,${imageData.base64}`,
+            },
+          });
+        }
+        
+        // Add text prompt
+        userContent.push({
+          type: 'text',
+          text: prompt,
+        });
+        
+        const body: Record<string, any> = {
+          model: config.model,
+          messages: [
+            { role: 'system', content: finalSystemMessage },
+            { role: 'user', content: userContent.length === 1 ? userContent[0].text : userContent },
+          ],
+          temperature: 0.2,
+          stream: false,
+        };
+        if (config.provider !== 'lmstudio') {
+          body.max_tokens = config.maxTokens ?? 4096;
+        }
+        return body;
       }
-      return body;
   }
 }
 
@@ -292,26 +363,54 @@ export async function classifyViaLLM(opts: {
   text: string,
   originalName: string,
   categoriesHint: string[],
+  fileContent?: FileContent,
 }): Promise<{ category_path: string; suggested_filename: string; confidence: number; raw?: any }>{
-  const { config, text, originalName, categoriesHint } = opts;
+  const { config, text, originalName, categoriesHint, fileContent } = opts;
+  
+  // Check if we have an image but the model doesn't support vision
+  if (fileContent?.image_base64 && !config.supportsVision) {
+    // Skip image files if model doesn't support vision
+    return {
+      category_path: 'uncategorized/images',
+      suggested_filename: originalName.replace(/\.[^/.]+$/, ''),
+      confidence: 0,
+      raw: { skipped: 'Model does not support vision' },
+    };
+  }
   
   const promptTemplate =
-    `You are a file organizer. Given the text content of a file, 
+    `You are a file organizer. Given the ${fileContent?.image_base64 ? 'image' : 'text content'} of a file, 
     1) classify it into a category path with up to 2 levels of subcategories. 
     Do not use more than 2 levels of subcategories. Separate each level with a forward slash (/). 
     2) suggest a concise filename base (no extension) that includes provider/company and date if present. 
+    ${fileContent?.image_base64 ? '\n\nAnalyze the image and describe what you see to determine the appropriate category and filename.' : ''}
     
     Reply in strict JSON with keys: category_path, suggested_filename, confidence (0-1).`;
 
   const hint = categoriesHint?.length ? `\n\nExisting categories (prefer one of these if it matches the content of the file):\n- ${categoriesHint.join('\n- ')}` : '';
   const maxTextLength = config.maxTextLength || 4096;
-  const prompt = `${promptTemplate}\n\nOriginal filename: ${originalName}\nContent (truncated to ${maxTextLength} chars):\n${text.slice(0, maxTextLength)}${hint}`;
+  
+  // Build prompt based on content type
+  let prompt: string;
+  if (fileContent?.image_base64) {
+    // For images, just provide the original filename and instructions
+    prompt = `${promptTemplate}\n\nOriginal filename: ${originalName}${hint}`;
+  } else {
+    // For text content, include the text
+    prompt = `${promptTemplate}\n\nOriginal filename: ${originalName}\nContent (truncated to ${maxTextLength} chars):\n${text.slice(0, maxTextLength)}${hint}`;
+  }
 
   const systemMessage = config.systemMessage || 'Return only valid JSON (no markdown), with keys: category_path, suggested_filename, confidence (0-1).';
   
   const endpoint = getCompletionEndpoint(config);
   const headers = buildHeaders(config);
-  const body = buildRequestBody(config, prompt, systemMessage);
+  
+  // Prepare image data if available
+  const imageData = fileContent?.image_base64 && fileContent?.mime_type && config.supportsVision
+    ? { base64: fileContent.image_base64, mimeType: fileContent.mime_type }
+    : undefined;
+  
+  const body = buildRequestBody(config, prompt, systemMessage, imageData);
 
   // Comprehensive debug logging
   debugLogger.info('LLM_REQUEST', 'Preparing LLM request', {
@@ -321,6 +420,8 @@ export async function classifyViaLLM(opts: {
     hasApiKey: !!config.apiKey,
     hasCustomHeaders: !!config.customHeaders,
     customHeaderKeys: config.customHeaders ? Object.keys(config.customHeaders) : [],
+    hasImage: !!imageData,
+    supportsVision: config.supportsVision,
   });
 
   debugLogger.debug('LLM_REQUEST', 'Request headers', { headers });
@@ -328,6 +429,7 @@ export async function classifyViaLLM(opts: {
     model: body.model,
     messageCount: body.messages?.length,
     systemMessage: body.messages?.[0]?.content?.substring(0, 100),
+    hasImageData: !!imageData,
   });
 
   let resp;

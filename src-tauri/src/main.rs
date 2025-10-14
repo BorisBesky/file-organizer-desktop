@@ -5,13 +5,17 @@
 
 use std::fs;
 use std::path::Path;
-use std::io::Write;
+use std::io::{Write, Read};
 use std::thread;
 use std::panic;
 use std::sync::{Mutex, OnceLock};
 use tauri::api::dialog::FileDialogBuilder;
 use tauri::{command, AppHandle, Manager, CustomMenuItem, Menu, MenuItem, Submenu, WindowMenuEvent};
 use walkdir::WalkDir;
+use docx_rs::*;
+use calamine::{Reader, open_workbook, Xlsx};
+use image::GenericImageView;
+use base64::Engine;
 
 #[command]
 async fn read_directory(path: String, include_subdirectories: bool) -> Result<Vec<String>, String> {
@@ -130,14 +134,169 @@ fn extract_pdf_text(path: &str) -> Result<String, String> {
     }
 }
 
+fn extract_docx_text(path: &str) -> Result<String, String> {
+    let mut file = fs::File::open(path)
+        .map_err(|e| format!("Failed to open DOCX file: {}", e))?;
+    
+    let mut buffer = Vec::new();
+    file.read_to_end(&mut buffer)
+        .map_err(|e| format!("Failed to read DOCX file: {}", e))?;
+    
+    let docx = read_docx(&buffer)
+        .map_err(|e| format!("Failed to parse DOCX file: {}", e))?;
+    
+    // Extract text from paragraphs
+    let mut text = String::new();
+    for child in &docx.document.children {
+        if let DocumentChild::Paragraph(para) = child {
+            for child in &para.children {
+                if let ParagraphChild::Run(run) = child {
+                    for child in &run.children {
+                        if let RunChild::Text(t) = child {
+                            text.push_str(&t.text);
+                            text.push(' ');
+                        }
+                    }
+                }
+            }
+            text.push('\n');
+        }
+    }
+    
+    Ok(text)
+}
+
+fn extract_xlsx_text(path: &str) -> Result<String, String> {
+    let mut workbook: Xlsx<_> = open_workbook(path)
+        .map_err(|e| format!("Failed to open Excel file: {}", e))?;
+    
+    let mut text = String::new();
+    
+    // Iterate through all sheets
+    for sheet_name in workbook.sheet_names().to_vec() {
+        text.push_str(&format!("Sheet: {}\n", sheet_name));
+        
+        if let Ok(range) = workbook.worksheet_range(&sheet_name) {
+            for row in range.rows() {
+                for cell in row {
+                    // Use get_string() method to convert cell to string
+                    let cell_str = cell.to_string();
+                    if !cell_str.is_empty() {
+                        text.push_str(&cell_str);
+                        text.push('\t');
+                    }
+                }
+                text.push('\n');
+            }
+        }
+        text.push('\n');
+    }
+    
+    Ok(text)
+}
+
+fn encode_image_base64(path: &str) -> Result<String, String> {
+    let img = image::open(path)
+        .map_err(|e| format!("Failed to open image: {}", e))?;
+    
+    // Resize large images to reduce token usage
+    let (width, height) = img.dimensions();
+    let max_dimension = 1024;
+    
+    let resized_img = if width > max_dimension || height > max_dimension {
+        let scale = max_dimension as f32 / width.max(height) as f32;
+        let new_width = (width as f32 * scale) as u32;
+        let new_height = (height as f32 * scale) as u32;
+        img.resize(new_width, new_height, image::imageops::FilterType::Lanczos3)
+    } else {
+        img
+    };
+    
+    // Encode as JPEG for smaller size
+    let mut buffer = Vec::new();
+    let mut cursor = std::io::Cursor::new(&mut buffer);
+    
+    resized_img.write_to(&mut cursor, image::ImageFormat::Jpeg)
+        .map_err(|e| format!("Failed to encode image: {}", e))?;
+    
+    Ok(base64::engine::general_purpose::STANDARD.encode(&buffer))
+}
+
+#[derive(serde::Serialize)]
+struct FileContent {
+    text: Option<String>,
+    image_base64: Option<String>,
+    mime_type: Option<String>,
+}
+
 #[command]
 async fn read_file_content(path: String) -> Result<String, String> {
-    if path.to_lowercase().ends_with(".pdf") {
-        // Run extraction in an isolated thread so panics cannot crash the runtime
-        extract_pdf_text(&path)
+    let path_lower = path.to_lowercase();
+    let content: FileContent;
+    
+    if path_lower.ends_with(".pdf") {
+        // Extract text from PDF
+        let text = extract_pdf_text(&path)?;
+        content = FileContent {
+            text: Some(text),
+            image_base64: None,
+            mime_type: Some("application/pdf".to_string()),
+        };
+    } else if path_lower.ends_with(".docx") {
+        // Extract text from DOCX
+        let text = extract_docx_text(&path)?;
+        content = FileContent {
+            text: Some(text),
+            image_base64: None,
+            mime_type: Some("application/vnd.openxmlformats-officedocument.wordprocessingml.document".to_string()),
+        };
+    } else if path_lower.ends_with(".doc") {
+        // DOC files are not supported by docx-rs, treat as unsupported
+        return Err("DOC format not supported. Please convert to DOCX.".to_string());
+    } else if path_lower.ends_with(".xlsx") || path_lower.ends_with(".xls") {
+        // Extract text from Excel
+        let text = extract_xlsx_text(&path)?;
+        content = FileContent {
+            text: Some(text),
+            image_base64: None,
+            mime_type: Some("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet".to_string()),
+        };
+    } else if path_lower.ends_with(".png") || path_lower.ends_with(".jpg") || 
+              path_lower.ends_with(".jpeg") || path_lower.ends_with(".gif") || 
+              path_lower.ends_with(".bmp") || path_lower.ends_with(".webp") {
+        // Encode image as base64
+        let image_data = encode_image_base64(&path)?;
+        let mime = if path_lower.ends_with(".png") {
+            "image/png"
+        } else if path_lower.ends_with(".jpg") || path_lower.ends_with(".jpeg") {
+            "image/jpeg"
+        } else if path_lower.ends_with(".gif") {
+            "image/gif"
+        } else if path_lower.ends_with(".bmp") {
+            "image/bmp"
+        } else if path_lower.ends_with(".webp") {
+            "image/webp"
+        } else {
+            "image/jpeg"
+        };
+        
+        content = FileContent {
+            text: None,
+            image_base64: Some(image_data),
+            mime_type: Some(mime.to_string()),
+        };
     } else {
-        fs::read_to_string(&path).map_err(|e| e.to_string())
+        // Plain text file
+        let text = fs::read_to_string(&path).map_err(|e| e.to_string())?;
+        content = FileContent {
+            text: Some(text),
+            image_base64: None,
+            mime_type: Some("text/plain".to_string()),
+        };
     }
+    
+    // Serialize as JSON
+    serde_json::to_string(&content).map_err(|e| format!("Failed to serialize content: {}", e))
 }
 
 #[command]

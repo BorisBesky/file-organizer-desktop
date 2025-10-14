@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react';
-import { classifyViaLLM, optimizeCategoriesViaLLM, LLMConfig, DEFAULT_CONFIGS, openFile } from './api';
+import { classifyViaLLM, optimizeCategoriesViaLLM, LLMConfig, DEFAULT_CONFIGS, openFile, FileContent } from './api';
 import { invoke } from '@tauri-apps/api/tauri';
 import { listen } from '@tauri-apps/api/event';
 import { ScanState } from './types';
@@ -36,7 +36,8 @@ function configsEqual(a?: LLMConfig, b?: LLMConfig) {
     a.model === b.model &&
     a.maxTokens === b.maxTokens &&
     a.maxTextLength === b.maxTextLength &&
-    a.systemMessage === b.systemMessage
+    a.systemMessage === b.systemMessage &&
+    a.supportsVision === b.supportsVision
   );
 }
 
@@ -92,13 +93,16 @@ export default function App() {
   const [statusExpanded, setStatusExpanded] = useState(true);
   const [helpOpen, setHelpOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
+  const [isOptimizing, setIsOptimizing] = useState(false);
+  const optimizationCancelRef = useRef(false);
   
   // Sorting state
   const [sortBy, setSortBy] = useState<SortField>('source');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   
-  // Sidebar width
+  // Sidebar width and collapse state
   const [sidebarWidth, setSidebarWidth] = useState(320);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const resizingSidebar = useRef(false);
   
   // Column widths (in pixels)
@@ -161,6 +165,11 @@ export default function App() {
     resizingSidebar.current = false;
     document.removeEventListener('mousemove', handleSidebarResizeMove);
     document.removeEventListener('mouseup', handleSidebarResizeEnd);
+  };
+  
+  // Toggle sidebar collapse
+  const toggleSidebarCollapse = () => {
+    setSidebarCollapsed(!sidebarCollapsed);
   };
   
   // Scan control state
@@ -311,16 +320,38 @@ export default function App() {
       scanControlRef.current.currentFileIndex = i + 1;
       setProgress({ current: i + 1, total: allFiles.length });
       
+      let fileContent: FileContent | null = null;
       let text = '';
       let readable = false;
       let reason = 'unsupported';
 
       try {
-        text = await invoke('read_file_content', { path: f });
-        readable = true;
-        reason = 'text';
+        const contentJson = await invoke<string>('read_file_content', { path: f });
+        fileContent = JSON.parse(contentJson);
+        
+        // Determine if the file is readable
+        if (fileContent?.text) {
+          text = fileContent.text;
+          readable = true;
+          
+          // Set reason based on mime type
+          if (fileContent.mime_type?.includes('pdf')) {
+            reason = 'pdf';
+          } else if (fileContent.mime_type?.includes('wordprocessingml')) {
+            reason = 'docx';
+          } else if (fileContent.mime_type?.includes('spreadsheetml')) {
+            reason = 'xlsx';
+          } else {
+            reason = 'text';
+          }
+        } else if (fileContent?.image_base64) {
+          readable = true;
+          reason = 'image';
+          text = ''; // No text content for images
+        }
       } catch (e) {
-        // ignore
+        // File not supported or error reading
+        reason = 'unsupported';
       }
 
       setEvents((prev: string[]) => [`Reading ${f} (${reason})`, ...prev]);
@@ -330,7 +361,13 @@ export default function App() {
         setEvents((prev: string[]) => [`Classifying ${f}`, ...prev]);
         let result;
         try {
-          result = await classifyViaLLM({ config: llmConfig, text, originalName: splitPath(f).name, categoriesHint });
+          result = await classifyViaLLM({ 
+            config: llmConfig, 
+            text, 
+            originalName: splitPath(f).name, 
+            categoriesHint,
+            fileContent: fileContent || undefined,
+          });
         } catch (e: any) {
           result = { category_path: 'uncategorized', suggested_filename: splitPath(f).name, confidence: 0, raw: { error: e?.message || String(e) } };
         }
@@ -347,16 +384,14 @@ export default function App() {
         processedFiles.push(info);
         setEvents((prev: string[]) => [`Classified ${f} -> ${dir} => ${finalDst}`, ...prev]);
         
-        // Add row to table immediately
-        const newRow = convertToRow(info);
-        setRows((prev: Row[]) => [...prev, newRow]);
+        // Update rows from processedFiles to avoid duplicates
+        setRows(processedFiles.map(convertToRow));
       } else {
         setEvents((prev: string[]) => [`Skipping ${f}: ${reason}`, ...prev]);
         processedFiles.push(info);
         
-        // Add skipped file to table immediately
-        const newRow = convertToRow(info);
-        setRows((prev: Row[]) => [...prev, newRow]);
+        // Update rows from processedFiles to avoid duplicates
+        setRows(processedFiles.map(convertToRow));
       }
     }
     
@@ -413,6 +448,8 @@ export default function App() {
     if (!rows.length) return;
     
     setBusy(true);
+    setIsOptimizing(true);
+    optimizationCancelRef.current = false;
     setEvents((prev: string[]) => ['Analyzing directory structure for optimizations...', ...prev]);
     
     // Build directory tree from current rows
@@ -425,10 +462,26 @@ export default function App() {
     });
     
     try {
+      // Check for cancellation before making the API call
+      if (optimizationCancelRef.current) {
+        setEvents((prev: string[]) => ['Optimization cancelled by user', ...prev]);
+        setBusy(false);
+        setIsOptimizing(false);
+        return;
+      }
+      
       const result = await optimizeCategoriesViaLLM({
         config: llmConfig,
         directoryTree,
       });
+      
+      // Check for cancellation after API call
+      if (optimizationCancelRef.current) {
+        setEvents((prev: string[]) => ['Optimization cancelled by user', ...prev]);
+        setBusy(false);
+        setIsOptimizing(false);
+        return;
+      }
       
       if (result.optimizations && result.optimizations.length > 0) {
         setEvents((prev: string[]) => [`Found ${result.optimizations.length} optimization suggestions:`, ...prev]);
@@ -449,10 +502,20 @@ export default function App() {
         setEvents((prev: string[]) => ['No optimizations suggested - directory structure looks good!', ...prev]);
       }
     } catch (e: any) {
-      setEvents((prev: string[]) => [`Failed to optimize categories: ${e?.message || String(e)}`, ...prev]);
+      if (optimizationCancelRef.current) {
+        setEvents((prev: string[]) => ['Optimization cancelled by user', ...prev]);
+      } else {
+        setEvents((prev: string[]) => [`Failed to optimize categories: ${e?.message || String(e)}`, ...prev]);
+      }
     }
     
     setBusy(false);
+    setIsOptimizing(false);
+  };
+
+  const cancelOptimization = () => {
+    optimizationCancelRef.current = true;
+    setEvents((prev: string[]) => ['Cancelling optimization...', ...prev]);
   };
 
   const applyMoves = async () => {
@@ -615,21 +678,53 @@ export default function App() {
         {(busy || scanState !== 'idle') && progress.total > 0 && (
           <div className="header-progress">
             <div className="progress-label">
-              Progress - {scanState.charAt(0).toUpperCase() + scanState.slice(1)}
+              {scanState === 'completed' 
+                ? 'File Analysis Completed' 
+                : scanState === 'stopped'
+                ? 'File Analysis Stopped'
+                : scanState === 'paused'
+                ? 'File Analysis Paused'
+                : `Progress - ${scanState.charAt(0).toUpperCase() + scanState.slice(1)}`
+              }
             </div>
             <div className="progress-container">
               <div 
-                className="progress-bar"
+                className={`progress-bar ${scanState === 'completed' ? 'progress-bar-completed' : scanState === 'stopped' ? 'progress-bar-stopped' : ''}`}
                 style={{ width: `${(progress.current / progress.total) * 100}%` }}
               />
             </div>
             <div className="progress-text">
               {scanState === 'organizing' 
                 ? `${progress.current} out of ${progress.total} files moved`
+                : scanState === 'completed'
+                ? `Successfully analyzed ${progress.total} files`
+                : scanState === 'stopped'
+                ? `Analyzed ${progress.current} of ${progress.total} files before stopping`
+                : scanState === 'paused'
+                ? `Paused at ${progress.current} / ${progress.total} files`
                 : `${progress.current} / ${progress.total} files`
-              } ({Math.round((progress.current / progress.total) * 100)}%)
-              {scanState === 'stopped' && ` - Stopped`}
-              {scanState === 'paused' && ` - Paused`}
+              } {scanState !== 'completed' && scanState !== 'stopped' && scanState !== 'paused' && `(${Math.round((progress.current / progress.total) * 100)}%)`}
+            </div>
+          </div>
+        )}
+        
+        {isOptimizing && (
+          <div className="header-progress">
+            <div className="progress-label">
+              Optimizing Directory Structure
+            </div>
+            <div className="progress-container">
+              <div className="progress-bar progress-bar-indeterminate" />
+            </div>
+            <div className="progress-text">
+              Analyzing categories and generating optimization suggestions...
+              <button 
+                className="cancel-optimization-btn"
+                onClick={cancelOptimization}
+                title="Cancel optimization"
+              >
+                Cancel
+              </button>
             </div>
           </div>
         )}
@@ -661,76 +756,91 @@ export default function App() {
       {/* Main Layout: Sidebar + Content */}
       <div className="app-main">
         {/* Left Sidebar */}
-        <aside className="app-sidebar" style={{ width: `${sidebarWidth}px` }}>
-          {/* LLM Configuration */}
-          <LLMConfigPanel
-            config={llmConfig}
-            onChange={setLlmConfig}
-            onTest={testLLMConnection}
-            disabled={busy}
-            providerConfigs={providerConfigs}
-            onLoadProviderConfig={loadProviderConfig}
-          />
-
-          {/* Directory Picker Section */}
-          <div className="sidebar-section">
-            <h3>Directory</h3>
-            <button onClick={pickDirectory} disabled={busy} className="w-full">
-              Pick Directory
-            </button>
-            {directory && (
-              <div className="directory-display">{directory}</div>
-            )}
-            <label className="mt8">
-              <input 
-                type="checkbox" 
-                checked={includeSubdirectories} 
-                onChange={e => setIncludeSubdirectories(e.target.checked)}
-                disabled={busy || scanState === 'scanning' || scanState === 'paused'}
+        <aside className="app-sidebar" style={{ width: sidebarCollapsed ? '0px' : `${sidebarWidth}px` }}>
+          {/* Collapse/Expand Toggle */}
+          <button 
+            className="sidebar-collapse-toggle" 
+            onClick={toggleSidebarCollapse}
+            title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            {sidebarCollapsed ? '▶' : '◀'}
+          </button>
+          
+          {!sidebarCollapsed && (
+            <>
+              {/* LLM Configuration */}
+              <LLMConfigPanel
+                config={llmConfig}
+                onChange={setLlmConfig}
+                onTest={testLLMConnection}
+                disabled={busy}
+                providerConfigs={providerConfigs}
+                onLoadProviderConfig={loadProviderConfig}
               />
-              Include subdirectories
-            </label>
-          </div>
 
-          {/* Scan Controls Section */}
-          <div className="sidebar-section">
-            <h3>Scan</h3>
-            <div className="button-column">
-              <button 
-                onClick={scan} 
-                disabled={busy || !directory || scanState === 'scanning' || scanState === 'paused'}
-                className="w-full"
-              >
-                {scanState === 'scanning' ? 'Scanning...' : scanState === 'paused' ? 'Paused' : 'Start Scan'}
-              </button>
-              
-              {scanState === 'scanning' && (
-                <>
-                  <button className="warning w-full" onClick={pauseScan} disabled={!busy}>Pause</button>
-                  <button className="danger w-full" onClick={stopScan} disabled={!busy}>Stop</button>
-                </>
-              )}
-              
-              {scanState === 'paused' && (
-                <>
-                  <button className="w-full" onClick={resumeScan}>Resume</button>
-                  <button className="danger w-full" onClick={stopScan}>Stop</button>
-                </>
-              )}
-              
-              {scanState === 'stopped' && (
-                <button className="w-full" onClick={resumeScan}>Continue Scan</button>
-              )}
-              
-              {scanState === 'completed' && (
-                <button className="secondary w-full" onClick={resetScan}>New Scan</button>
-              )}
-            </div>
-          </div>
+              {/* Directory Picker Section */}
+              <div className="sidebar-section">
+                <h3>Directory</h3>
+                <button onClick={pickDirectory} disabled={busy} className="w-full">
+                  Pick Directory
+                </button>
+                {directory && (
+                  <div className="directory-display">{directory}</div>
+                )}
+                <label className="mt8">
+                  <input 
+                    type="checkbox" 
+                    checked={includeSubdirectories} 
+                    onChange={e => setIncludeSubdirectories(e.target.checked)}
+                    disabled={busy || scanState === 'scanning' || scanState === 'paused'}
+                  />
+                  Include subdirectories
+                </label>
+              </div>
+
+              {/* Scan Controls Section */}
+              <div className="sidebar-section">
+                <h3>Scan</h3>
+                <div className="button-column">
+                  <button 
+                    onClick={scan} 
+                    disabled={busy || !directory || scanState === 'scanning' || scanState === 'paused'}
+                    className="w-full"
+                  >
+                    {scanState === 'scanning' ? 'Scanning...' : scanState === 'paused' ? 'Paused' : 'Start Scan'}
+                  </button>
+                  
+                  {scanState === 'scanning' && (
+                    <>
+                      <button className="warning w-full" onClick={pauseScan} disabled={!busy}>Pause</button>
+                      <button className="danger w-full" onClick={stopScan} disabled={!busy}>Stop</button>
+                    </>
+                  )}
+                  
+                  {scanState === 'paused' && (
+                    <>
+                      <button className="w-full" onClick={resumeScan}>Resume</button>
+                      <button className="danger w-full" onClick={stopScan}>Stop</button>
+                    </>
+                  )}
+                  
+                  {scanState === 'stopped' && (
+                    <button className="w-full" onClick={resumeScan}>Continue Scan</button>
+                  )}
+                  
+                  {scanState === 'completed' && (
+                    <button className="secondary w-full" onClick={resetScan}>New Scan</button>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
         </aside>
         
         {/* Sidebar Resize Handle */}
-        <div className="sidebar-resize-handle" onMouseDown={handleSidebarResizeStart} />
+        {!sidebarCollapsed && (
+          <div className="sidebar-resize-handle" onMouseDown={handleSidebarResizeStart} />
+        )}
 
         {/* Main Content Area */}
         <main className="app-content">
@@ -740,7 +850,7 @@ export default function App() {
                 <h2>Review & Edit Proposals</h2>
                 <div className="button-row">
                   <button className="secondary" onClick={optimizeCategories} disabled={busy}>
-                    {busy ? 'Optimizing...' : 'Optimize Categories'}
+                    Optimize Categories
                   </button>
                   <button onClick={applyMoves} disabled={busy}>Approve Selected</button>
                 </div>

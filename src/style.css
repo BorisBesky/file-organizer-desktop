@@ -72,6 +72,40 @@ body {
   flex-direction: column;
   gap: 16px;
   position: relative;
+  transition: width 0.3s ease;
+}
+
+.sidebar-collapse-toggle {
+  position: absolute;
+  top: 0px;
+  right: 0px;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  background: #ffffff;
+  border: 1px solid #d1d1d6;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: #6e6e73;
+  z-index: 100;
+  transition: all 0.15s;
+}
+
+.sidebar-collapse-toggle:hover {
+  background: #007aff;
+  color: white;
+  border-color: #007aff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+}
+
+.sidebar-collapse-toggle:active {
+  background: #0051d5;
+  border-color: #0051d5;
+  transform: scale(0.95);
 }
 
 .sidebar-resize-handle {
@@ -463,6 +497,12 @@ button.secondary:active:not(:disabled) {
   background: #d5d5d7;
 }
 
+button.secondary:disabled {
+  background: #e5e5e5;
+  color: #a1a1a6;
+  cursor: not-allowed;
+}
+
 button.danger {
   background: #ff3b30;
 }
@@ -570,10 +610,59 @@ label input[type="checkbox"] {
   transition: width 0.3s ease;
   border-radius: 3px;
 }
+
+.progress-bar-completed {
+  background-color: #34c759;
+}
+
+.progress-bar-stopped {
+  background-color: #ff9500;
+}
+
+.progress-bar-indeterminate {
+  width: 100% !important;
+  background: linear-gradient(90deg, #007aff 0%, #5ac8fa 50%, #007aff 100%);
+  background-size: 200% 100%;
+  animation: indeterminate-progress 1.5s ease-in-out infinite;
+}
+
+@keyframes indeterminate-progress {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.cancel-optimization-btn {
+  margin-left: 12px;
+  padding: 2px 8px;
+  font-size: 11px;
+  background: #ff3b30;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.15s;
+}
+
+.cancel-optimization-btn:hover {
+  background: #d62c21;
+  transform: scale(1.05);
+}
+
+.cancel-optimization-btn:active {
+  transform: scale(0.95);
+}
+
 .progress-text {
   font-size: 13px;
   color: #6e6e73;
   margin-top: 4px;
+  display: flex;
+  align-items: center;
 }
 .status-textarea {
   width: 100%;
@@ -616,9 +705,9 @@ label input[type="checkbox"] {
   border-radius: 8px;
   padding: 12px;
   background: white;
-  overflow: hidden;
   display: flex;
   flex-direction: column;
+  min-height: 40px;
 }
 
 .llm-config-header {
@@ -629,7 +718,7 @@ label input[type="checkbox"] {
   width: 100%;
   background: transparent;
   border: none;
-  padding: 6px 8px;
+  padding: 8px;
   font-size: 14px;
   font-weight: 600;
   text-align: left;
@@ -641,6 +730,7 @@ label input[type="checkbox"] {
   border-radius: 6px;
   transition: background-color 0.15s;
   height: auto;
+  min-height: 32px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -671,6 +761,7 @@ label input[type="checkbox"] {
   overflow-y: auto; /* Changed to auto to only show scrollbar when needed */
   overflow-x: hidden;
   flex-grow: 1;
+  max-height: 600px; /* Ensure content doesn't grow too large */
 }
 
 /* Custom scrollbar for LLM config content */

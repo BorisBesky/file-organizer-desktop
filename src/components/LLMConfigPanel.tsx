@@ -301,6 +301,20 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled, pro
                 </div>
               </div>
               <div className="config-section">
+                <label className="checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={config.supportsVision || false}
+                    onChange={(e) => onChange({ ...config, supportsVision: e.target.checked })}
+                    disabled={disabled}
+                  />
+                  Supports Vision (Image Analysis)
+                </label>
+                <div className="config-hint">
+                  Enable if your model supports image inputs (e.g., GPT-4 Vision, Claude 3, Gemini Vision)
+                </div>
+              </div>
+              <div className="config-section">
                 <label className="config-label">
                   System Message
                   <textarea
