@@ -50,7 +50,44 @@ file-organizer-desktop
 Before building the Tauri application, ensure you have the following installed:
 
 - **Node.js** (v16 or higher)
-- **Rust** (latest stable version)
+- **Rust and Cargo** (latest stable version)
+  
+  To install Rust and Cargo:
+  
+  1. Visit [https://rustup.rs/](https://rustup.rs/) or run the appropriate command for your platform:
+     
+     **Windows:**
+     ```powershell
+     # Download and run rustup-init.exe from https://rustup.rs/
+     # Or use winget:
+     winget install Rustlang.Rustup
+     ```
+     
+     **macOS/Linux:**
+     ```bash
+     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+     ```
+  
+  2. Follow the on-screen instructions (typically just press Enter to accept defaults)
+  
+  3. **IMPORTANT:** After installation, you **must restart your terminal** (close and reopen) for the changes to take effect.
+     
+     Alternatively, on Windows PowerShell, you can manually add Cargo to your current session:
+     ```powershell
+     $env:PATH += ";$env:USERPROFILE\.cargo\bin"
+     ```
+     
+     On macOS/Linux, run:
+     ```bash
+     source $HOME/.cargo/env  # macOS/Linux
+     ```
+  
+  4. Verify installation:
+     ```bash
+     rustc --version
+     cargo --version
+     ```
+
 - **Platform-specific dependencies:**
   - **macOS**: Xcode Command Line Tools
   - **Linux**: See [Tauri prerequisites for Linux](https://tauri.app/v1/guides/getting-started/prerequisites#setting-up-linux)

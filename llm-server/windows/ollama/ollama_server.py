@@ -8,8 +8,8 @@ from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 import uvicorn
 
-model_id = "tiiuae/Falcon-H1-0.5B-Instruct-GGUF"
-filename = "Falcon-H1-0.5B-Instruct-Q4_K_M.gguf"
+model_id = "MaziyarPanahi/gemma-3-1b-it-GGUF" # "ClarityClips/ClarityQwen2Summarizer" #  "tiiuae/Falcon-H1-0.5B-Instruct-GGUF"
+filename = "gemma-3-1b-it.Q8_0.gguf"  # "Qwen2-7B-Summarizer.gguf"  # "falcon-h1-0.5b-instruct.gguf"
 
 file_path = hf_hub_download(repo_id=model_id, filename=filename)
 print(f"Downloaded file to: {file_path}")

@@ -296,7 +296,7 @@ export async function classifyViaLLM(opts: {
   const { config, text, originalName, categoriesHint } = opts;
   
   const promptTemplate =
-    "You are a file organizer. Given the text content of a file, 1) classify it into a category path with up to 3 levels like 'medical/bills' or 'finance/taxes'. 2) suggest a concise filename base (no extension) that includes provider/company and date if present. Reply in strict JSON with keys: category_path, suggested_filename, confidence (0-1).";
+    "You are a file organizer. Given the text content of a file, 1) classify it into a category path with up to 3 levels like. 2) suggest a concise filename base (no extension) that includes provider/company and date if present. Reply in strict JSON with keys: category_path, suggested_filename, confidence (0-1).";
 
   const hint = categoriesHint?.length ? `\n\nExisting categories (prefer one of these if appropriate):\n- ${categoriesHint.join('\n- ')}` : '';
   const maxTextLength = config.maxTextLength || 4096;
@@ -411,7 +411,7 @@ export async function optimizeCategoriesViaLLM(opts: {
   const promptTemplate = `You are a file organization optimizer. Analyze this directory structure and suggest optimizations to merge similar categories or reorganize files for better structure.
 
 Focus on:
-1. Merging categories with similar meanings (e.g., "finance" and "financial", "medical" and "health")
+1. Merging categories with similar meanings
 2. Consolidating subcategories that are too granular
 3. Improving category naming consistency
 4. Reducing redundant categories
