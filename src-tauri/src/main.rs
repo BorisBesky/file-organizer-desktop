@@ -6,6 +6,9 @@
 use std::fs;
 use std::path::Path;
 use std::io::Write;
+use std::thread;
+use std::panic;
+use std::sync::{Mutex, OnceLock};
 use tauri::api::dialog::FileDialogBuilder;
 use tauri::{command, AppHandle, Manager, CustomMenuItem, Menu, MenuItem, Submenu, WindowMenuEvent};
 use walkdir::WalkDir;
@@ -101,21 +104,37 @@ async fn save_diagnostic_logs(content: String, filename: String) -> Result<Strin
     Ok(file_path.to_string_lossy().to_string())
 }
 
+static PANIC_HOOK_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+
+fn extract_pdf_text(path: &str) -> Result<String, String> {
+    let owned_path = path.to_owned();
+    let handle = thread::spawn(move || {
+        let lock = PANIC_HOOK_LOCK.get_or_init(|| Mutex::new(())).lock().unwrap();
+        let original_hook = panic::take_hook();
+        panic::set_hook(Box::new(|_| {}));
+        let extraction_result = panic::catch_unwind(|| pdf_extract::extract_text(&owned_path));
+        panic::set_hook(original_hook);
+        drop(lock);
+        extraction_result
+    });
+
+    match handle.join() {
+        Ok(Ok(Ok(text))) => Ok(text),
+        Ok(Ok(Err(e))) => Err(format!(
+            "Failed to extract text from PDF: {}. This PDF may have complex fonts or encoding issues.",
+            e
+        )),
+        Ok(Err(_)) | Err(_) => Err(
+            "Failed to extract text from PDF: The PDF contains unsupported fonts or encoding that cannot be processed.".to_string(),
+        ),
+    }
+}
+
 #[command]
 async fn read_file_content(path: String) -> Result<String, String> {
     if path.to_lowercase().ends_with(".pdf") {
-        // Use a more robust approach for PDF extraction with error handling
-        match std::panic::catch_unwind(|| pdf_extract::extract_text(&path)) {
-            Ok(Ok(text)) => Ok(text),
-            Ok(Err(e)) => {
-                // If PDF extraction fails, return a descriptive error instead of panicking
-                Err(format!("Failed to extract text from PDF: {}. This PDF may have complex fonts or encoding issues.", e))
-            }
-            Err(_) => {
-                // If the library panics, catch it and return a user-friendly error
-                Err("Failed to extract text from PDF: The PDF contains unsupported fonts or encoding that cannot be processed.".to_string())
-            }
-        }
+        // Run extraction in an isolated thread so panics cannot crash the runtime
+        extract_pdf_text(&path)
     } else {
         fs::read_to_string(&path).map_err(|e| e.to_string())
     }

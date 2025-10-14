@@ -28,6 +28,18 @@ function splitPath(p: string) {
   return { dir, name, ext };
 }
 
+function configsEqual(a?: LLMConfig, b?: LLMConfig) {
+  if (!a || !b) return false;
+  return (
+    a.provider === b.provider &&
+    a.baseUrl === b.baseUrl &&
+    a.model === b.model &&
+    a.maxTokens === b.maxTokens &&
+    a.maxTextLength === b.maxTextLength &&
+    a.systemMessage === b.systemMessage
+  );
+}
+
 type Row = { src: string; readable: boolean; reason?: string; category: string; name: string; ext: string; enabled: boolean; dst?: any };
 
 type SortField = 'source' | 'category' | 'filename' | 'extension';
@@ -165,20 +177,26 @@ export default function App() {
   // Save LLM config to localStorage whenever it changes
   useEffect(() => {
     try {
-      // Save current config
       localStorage.setItem('llmConfig', JSON.stringify(llmConfig));
-      
-      // Save per-provider config
-      const newProviderConfigs = {
-        ...providerConfigs,
-        [llmConfig.provider]: llmConfig
-      };
-      localStorage.setItem('llmProviderConfigs', JSON.stringify(newProviderConfigs));
-      setProviderConfigs(newProviderConfigs);
     } catch (error) {
       console.error('Failed to save LLM config to localStorage:', error);
     }
-  }, [llmConfig, providerConfigs]);
+
+    setProviderConfigs(prev => {
+      const current = prev[llmConfig.provider];
+      if (configsEqual(current, llmConfig)) {
+        return prev;
+      }
+
+      const updated = { ...prev, [llmConfig.provider]: llmConfig };
+      try {
+        localStorage.setItem('llmProviderConfigs', JSON.stringify(updated));
+      } catch (error) {
+        console.error('Failed to save provider configs to localStorage:', error);
+      }
+      return updated;
+    });
+  }, [llmConfig]);
 
   // Function to load a provider's saved config
   const loadProviderConfig = (provider: string) => {
