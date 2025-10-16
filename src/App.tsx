@@ -749,6 +749,22 @@ export default function App() {
             >
               {sidebarCollapsed ? '▶' : '◀'}
             </button>
+            <div className="header-scan-buttons">
+              <button 
+                onClick={scan} 
+                disabled={busy || !directory || scanState === 'scanning'}
+              >
+                {scanState === 'scanning' ? 'Scanning...' : scanState === 'stopped' ? 'Resume Scan' : 'Start Scan'}
+              </button>
+              
+              {scanState === 'scanning' && (
+                <button className="danger" onClick={stopScan} disabled={!busy}>Stop</button>
+              )}
+              
+              {(scanState === 'completed' || scanState === 'stopped') && (
+                <button className="secondary" onClick={resetScan}>New Scan</button>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -787,28 +803,6 @@ export default function App() {
                   />
                   Include subdirectories
                 </label>
-              </div>
-
-              {/* Scan Controls Section */}
-              <div className="sidebar-section">
-                <h3>Scan</h3>
-                <div className="button-column">
-                  <button 
-                    onClick={scan} 
-                    disabled={busy || !directory || scanState === 'scanning'}
-                    className="w-full"
-                  >
-                    {scanState === 'scanning' ? 'Scanning...' : scanState === 'stopped' ? 'Resume Scan' : 'Start Scan'}
-                  </button>
-                  
-                  {scanState === 'scanning' && (
-                    <button className="danger w-full" onClick={stopScan} disabled={!busy}>Stop</button>
-                  )}
-                  
-                  {(scanState === 'completed' || scanState === 'stopped') && (
-                    <button className="secondary w-full" onClick={resetScan}>New Scan</button>
-                  )}
-                </div>
               </div>
             </>
           )}

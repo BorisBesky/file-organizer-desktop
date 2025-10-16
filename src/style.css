@@ -31,9 +31,20 @@ body {
 }
 
 .header-toggle-container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
   margin-top: 12px;
   padding-top: 8px;
   border-top: 1px solid #e5e5e5;
+}
+
+.header-scan-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
 }
 
 .header-progress {
