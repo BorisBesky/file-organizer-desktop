@@ -667,13 +667,6 @@ export default function App() {
     <div className="app-layout">
       {/* Progress/Status Header */}
       <div className="app-header">
-        <button 
-          className="sidebar-collapse-toggle" 
-          onClick={toggleSidebarCollapse}
-          title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-        >
-          {sidebarCollapsed ? '▶' : '◀'}
-        </button>
         <div className="header-content">
           {(busy || scanState !== 'idle') && progress.total > 0 && (
             <div className="header-progress">
@@ -747,6 +740,16 @@ export default function App() {
               )}
             </div>
           )}
+          
+          <div className="header-toggle-container">
+            <button 
+              className="sidebar-collapse-toggle" 
+              onClick={toggleSidebarCollapse}
+              title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            >
+              {sidebarCollapsed ? '▶' : '◀'}
+            </button>
+          </div>
         </div>
       </div>
 
