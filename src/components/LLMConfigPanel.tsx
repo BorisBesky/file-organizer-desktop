@@ -94,22 +94,7 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled, pro
 
   const currentManagedConfig = managedLLMConfig || defaultManagedConfig;
 
-  // Load managed LLM status when provider is managed-local
-  useEffect(() => {
-    if (config.provider === 'managed-local') {
-      loadManagedLLMStatus();
-    }
-  }, [config.provider]);
-
-  // Initialize env vars from config
-  useEffect(() => {
-    if (currentManagedConfig.env_vars) {
-      const envArray = Object.entries(currentManagedConfig.env_vars).map(([key, value]) => ({ key, value }));
-      setEnvVars(envArray);
-    }
-  }, [currentManagedConfig.env_vars]);
-
-  const loadManagedLLMStatus = async () => {
+  const loadManagedLLMStatus = React.useCallback(async () => {
     try {
       const status = await getManagedLLMServerStatus();
       setManagedLLMStatus(status);
@@ -121,7 +106,29 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled, pro
     } catch (error) {
       console.error('Failed to load managed LLM status:', error);
     }
-  };
+  }, []);
+
+  // Load managed LLM status when provider is managed-local
+  useEffect(() => {
+    if (config.provider === 'managed-local') {
+      loadManagedLLMStatus();
+      
+      // Set up periodic status refresh to keep UI in sync
+      const intervalId = setInterval(() => {
+        loadManagedLLMStatus();
+      }, 5000); // Refresh every 5 seconds
+      
+      return () => clearInterval(intervalId);
+    }
+  }, [config.provider, loadManagedLLMStatus]);
+
+  // Initialize env vars from config
+  useEffect(() => {
+    if (currentManagedConfig.env_vars) {
+      const envArray = Object.entries(currentManagedConfig.env_vars).map(([key, value]) => ({ key, value }));
+      setEnvVars(envArray);
+    }
+  }, [currentManagedConfig.env_vars]);
 
   const handleStartServer = async () => {
     try {

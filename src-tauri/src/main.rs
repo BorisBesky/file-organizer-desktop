@@ -447,7 +447,11 @@ async fn get_llm_server_status(app: AppHandle) -> Result<ManagedLLMServerInfo, S
     match client.get(&test_url).timeout(std::time::Duration::from_secs(5)).send().await {
         Ok(response) => {
             eprintln!("Server responded with status: {}", response.status());
-            if response.status().is_success() {
+            let status_code = response.status();
+            // Read the response body to properly close the connection
+            let _ = response.bytes().await;
+            
+            if status_code.is_success() {
                 Ok(ManagedLLMServerInfo {
                     status: "running".to_string(),
                     version: Some("1.0.0".to_string()), // TODO: Get actual version
@@ -456,13 +460,13 @@ async fn get_llm_server_status(app: AppHandle) -> Result<ManagedLLMServerInfo, S
                     error: None,
                 })
             } else {
-                eprintln!("Server responded but with error status: {}", response.status());
+                eprintln!("Server responded but with error status: {}", status_code);
                 Ok(ManagedLLMServerInfo {
                     status: "downloaded".to_string(),
                     version: Some("1.0.0".to_string()),
                     path: Some(server_exe.to_string_lossy().to_string()),
                     port: Some(default_port),
-                    error: Some(format!("Server responded with status: {}", response.status())),
+                    error: Some(format!("Server responded with status: {}", status_code)),
                 })
             }
         }
@@ -695,15 +699,17 @@ async fn start_llm_server(
     }
 
     // Store the process handle
+    let pid = child.id();
     {
         let mut state_guard = state.lock().unwrap();
         *state_guard = Some(child);
+        eprintln!("Stored server process with PID {} in state", pid);
     }
 
     eprintln!("Server process stored, waiting for initialization...");
     
     // Give the server more time to start up
-    tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
+    tokio::time::sleep(tokio::time::Duration::from_secs(3)).await;
     
     // Test if the server is responding
     let test_url = format!("http://{}:{}/v1/models", config.host, config.port);
@@ -713,6 +719,8 @@ async fn start_llm_server(
     match client.get(&test_url).timeout(std::time::Duration::from_secs(10)).send().await {
         Ok(response) => {
             eprintln!("Server startup test successful: {}", response.status());
+            // Read the response body to properly close the connection
+            let _ = response.bytes().await;
         }
         Err(e) => {
             eprintln!("Server startup test failed: {}", e);
@@ -724,9 +732,13 @@ async fn start_llm_server(
 
 #[command]
 async fn stop_llm_server(state: State<'_, ManagedLLMState>) -> Result<String, String> {
-    let mut state_guard = state.lock().unwrap();
-    
     eprintln!("Attempting to stop LLM server...");
+    
+    let mut state_guard = state.lock().unwrap();
+    eprintln!("Got lock on state");
+    
+    let has_child = state_guard.is_some();
+    eprintln!("State has child process: {}", has_child);
     
     if let Some(mut child) = state_guard.take() {
         let pid = child.id();
@@ -832,10 +844,40 @@ fn handle_menu_event(event: WindowMenuEvent) {
 fn main() {
     let menu = create_menu();
     
+    // Create the managed state for the LLM server
+    let llm_state = Arc::new(Mutex::new(None::<Child>)) as ManagedLLMState;
+    
     tauri::Builder::default()
         .menu(menu)
         .on_menu_event(handle_menu_event)
-        .manage(Arc::new(Mutex::new(None::<Child>)) as ManagedLLMState)
+        .manage(llm_state.clone())
+        .on_window_event(move |event| {
+            if let tauri::WindowEvent::Destroyed = event.event() {
+                eprintln!("Window closing, shutting down LLM server if running...");
+                
+                // Stop the LLM server
+                let mut state_guard = llm_state.lock().unwrap();
+                if let Some(mut child) = state_guard.take() {
+                    let pid = child.id();
+                    eprintln!("Stopping LLM server with PID: {}", pid);
+                    
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    
+                    // On Windows, also kill the process tree
+                    #[cfg(target_os = "windows")]
+                    {
+                        let _ = std::process::Command::new("taskkill")
+                            .args(&["/F", "/T", "/PID", &pid.to_string()])
+                            .output();
+                    }
+                    
+                    eprintln!("LLM server stopped on app exit");
+                } else {
+                    eprintln!("No LLM server was running on exit");
+                }
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             read_directory,
             pick_directory,
