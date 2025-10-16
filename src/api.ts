@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/tauri';
 import { debugLogger } from './debug-logger';
+import { ManagedLLMServerInfo, ManagedLLMConfig } from './types';
 
 // Helper function to make HTTP requests via Tauri backend (bypasses CORS)
 async function tauriFetch(url: string, options: {
@@ -26,7 +27,7 @@ async function tauriFetch(url: string, options: {
 }
 
 // LLM Provider Configuration Types
-export type LLMProviderType = 'lmstudio' | 'ollama' | 'openai' | 'anthropic' | 'groq' | 'gemini' | 'custom';
+export type LLMProviderType = 'lmstudio' | 'ollama' | 'openai' | 'anthropic' | 'groq' | 'gemini' | 'custom' | 'managed-local';
 
 export interface LLMConfig {
   provider: LLMProviderType;
@@ -81,6 +82,11 @@ export const DEFAULT_CONFIGS: Record<LLMProviderType, Partial<LLMConfig>> = {
     provider: 'custom',
     baseUrl: '',
     model: '',
+  },
+  'managed-local': {
+    provider: 'managed-local',
+    baseUrl: 'http://127.0.0.1:8000',
+    model: 'local-model',
   },
 };
 
@@ -623,5 +629,59 @@ export async function listLMStudioModels(baseUrl: string): Promise<string[]> {
   } catch (e) {
     console.warn('Failed to list LM Studio models', e);
     return [];
+  }
+}
+
+// Managed LLM Server API functions
+
+export async function getManagedLLMServerStatus(): Promise<ManagedLLMServerInfo> {
+  try {
+    return await invoke<ManagedLLMServerInfo>('get_llm_server_status');
+  } catch (error: any) {
+    throw new Error(`Failed to get server status: ${error.message || String(error)}`);
+  }
+}
+
+export async function downloadManagedLLMServer(
+  version: string,
+  onProgress?: (percent: number) => void
+): Promise<string> {
+  try {
+    // Call the download command - progress tracking would need to be implemented with events
+    // For now, we'll simulate progress in the UI and call the actual download
+    const result = await invoke<string>('download_llm_server', { version });
+    
+    // Ensure progress reaches 100% when download completes
+    if (onProgress) {
+      onProgress(100);
+    }
+    
+    return result;
+  } catch (error: any) {
+    throw new Error(`Failed to download server: ${error.message || String(error)}`);
+  }
+}
+
+export async function startManagedLLMServer(config: ManagedLLMConfig): Promise<string> {
+  try {
+    return await invoke<string>('start_llm_server', { config });
+  } catch (error: any) {
+    throw new Error(`Failed to start server: ${error.message || String(error)}`);
+  }
+}
+
+export async function stopManagedLLMServer(): Promise<string> {
+  try {
+    return await invoke<string>('stop_llm_server');
+  } catch (error: any) {
+    throw new Error(`Failed to stop server: ${error.message || String(error)}`);
+  }
+}
+
+export async function getManagedLLMServerInfo(): Promise<ManagedLLMServerInfo> {
+  try {
+    return await invoke<ManagedLLMServerInfo>('get_llm_server_info');
+  } catch (error: any) {
+    throw new Error(`Failed to get server info: ${error.message || String(error)}`);
   }
 }

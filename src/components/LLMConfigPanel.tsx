@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { LLMConfig, LLMProviderType, DEFAULT_CONFIGS, listOllamaModels, listLMStudioModels } from '../api';
+import { LLMConfig, LLMProviderType, DEFAULT_CONFIGS, listOllamaModels, listLMStudioModels, getManagedLLMServerStatus, startManagedLLMServer, stopManagedLLMServer, getManagedLLMServerInfo } from '../api';
+import { ManagedLLMServerInfo, ManagedLLMConfig } from '../types';
+import ManagedLLMDialog from './ManagedLLMDialog';
 
 interface LLMConfigPanelProps {
   config: LLMConfig;
@@ -8,6 +10,8 @@ interface LLMConfigPanelProps {
   disabled?: boolean;
   providerConfigs?: Record<string, LLMConfig>;
   onLoadProviderConfig?: (provider: string) => void;
+  managedLLMConfig?: ManagedLLMConfig;
+  onManagedLLMConfigChange?: (config: ManagedLLMConfig) => void;
 }
 
 const PROVIDER_INFO: Record<LLMProviderType, { name: string; description: string; requiresApiKey: boolean }> = {
@@ -46,9 +50,14 @@ const PROVIDER_INFO: Record<LLMProviderType, { name: string; description: string
     description: 'Custom OpenAI-compatible endpoint',
     requiresApiKey: false,
   },
+  'managed-local': {
+    name: 'Managed Local LLM',
+    description: 'Embedded local LLM server (auto-downloaded)',
+    requiresApiKey: false,
+  },
 };
 
-export default function LLMConfigPanel({ config, onChange, onTest, disabled, providerConfigs = {}, onLoadProviderConfig }: LLMConfigPanelProps) {
+export default function LLMConfigPanel({ config, onChange, onTest, disabled, providerConfigs = {}, onLoadProviderConfig, managedLLMConfig, onManagedLLMConfigChange }: LLMConfigPanelProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [advancedExpanded, setAdvancedExpanded] = useState(false);
   const [availableModels, setAvailableModels] = useState<string[]>([]);
@@ -60,6 +69,12 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled, pro
     config.customHeaders ? JSON.stringify(config.customHeaders, null, 2) : ''
   );
   const [isCustomHeadersValid, setIsCustomHeadersValid] = useState(true);
+  
+  // Managed LLM state
+  const [managedLLMStatus, setManagedLLMStatus] = useState<ManagedLLMServerInfo | null>(null);
+  const [showDownloadDialog, setShowDownloadDialog] = useState(false);
+  const [serverConfigExpanded, setServerConfigExpanded] = useState(false);
+  const [envVars, setEnvVars] = useState<Array<{key: string, value: string}>>([]);
 
   useEffect(() => {
     const newHeadersText = config.customHeaders ? JSON.stringify(config.customHeaders, null, 2) : '';
@@ -67,6 +82,93 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled, pro
   }, [config.customHeaders]);
 
   const currentProviderInfo = PROVIDER_INFO[config.provider];
+
+  // Initialize managed LLM config if not provided
+  const defaultManagedConfig: ManagedLLMConfig = {
+    port: 8000,
+    host: '127.0.0.1',
+    model: 'MaziyarPanahi/gemma-3-1b-it-GGUF',
+    log_level: 'info',
+    env_vars: {}
+  };
+
+  const currentManagedConfig = managedLLMConfig || defaultManagedConfig;
+
+  // Load managed LLM status when provider is managed-local
+  useEffect(() => {
+    if (config.provider === 'managed-local') {
+      loadManagedLLMStatus();
+    }
+  }, [config.provider]);
+
+  // Initialize env vars from config
+  useEffect(() => {
+    if (currentManagedConfig.env_vars) {
+      const envArray = Object.entries(currentManagedConfig.env_vars).map(([key, value]) => ({ key, value }));
+      setEnvVars(envArray);
+    }
+  }, [currentManagedConfig.env_vars]);
+
+  const loadManagedLLMStatus = async () => {
+    try {
+      const status = await getManagedLLMServerStatus();
+      setManagedLLMStatus(status);
+      
+      // Show download dialog if not downloaded
+      if (status.status === 'not_downloaded') {
+        setShowDownloadDialog(true);
+      }
+    } catch (error) {
+      console.error('Failed to load managed LLM status:', error);
+    }
+  };
+
+  const handleStartServer = async () => {
+    try {
+      await startManagedLLMServer(currentManagedConfig);
+      await loadManagedLLMStatus();
+    } catch (error: any) {
+      console.error('Failed to start server:', error);
+      setTestMessage(`Failed to start server: ${error.message}`);
+    }
+  };
+
+  const handleStopServer = async () => {
+    try {
+      await stopManagedLLMServer();
+      await loadManagedLLMStatus();
+    } catch (error: any) {
+      console.error('Failed to stop server:', error);
+      setTestMessage(`Failed to stop server: ${error.message}`);
+    }
+  };
+
+  const updateManagedConfig = (updates: Partial<ManagedLLMConfig>) => {
+    if (onManagedLLMConfigChange) {
+      onManagedLLMConfigChange({ ...currentManagedConfig, ...updates });
+    }
+  };
+
+  const addEnvVar = () => {
+    setEnvVars([...envVars, { key: '', value: '' }]);
+  };
+
+  const removeEnvVar = (index: number) => {
+    const newEnvVars = envVars.filter((_, i) => i !== index);
+    setEnvVars(newEnvVars);
+    updateManagedConfig({ 
+      env_vars: Object.fromEntries(newEnvVars.map(env => [env.key, env.value]).filter(([key]) => key)) 
+    });
+  };
+
+  const updateEnvVar = (index: number, field: 'key' | 'value', value: string) => {
+    const newEnvVars = [...envVars];
+    newEnvVars[index][field] = value;
+    setEnvVars(newEnvVars);
+    updateManagedConfig({ 
+      env_vars: Object.fromEntries(newEnvVars.map(env => [env.key, env.value]).filter(([key]) => key)) 
+    });
+  };
 
   const handleProviderChange = (provider: LLMProviderType) => {
     // Check if we have a saved config for this provider
@@ -353,6 +455,215 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled, pro
             </div>
           )}
 
+          {/* Managed LLM Server Controls */}
+          {config.provider === 'managed-local' && (
+            <>
+              {/* Server Status and Controls */}
+              <div className="config-section">
+                <h4>Server Status</h4>
+                {managedLLMStatus && (
+                  <div className="server-status">
+                    <div className="status-indicator">
+                      <span className={`status-badge status-${managedLLMStatus.status}`}>
+                        {managedLLMStatus.status === 'running' ? '🟢 Running' : 
+                         managedLLMStatus.status === 'stopped' ? '⚪ Stopped' :
+                         managedLLMStatus.status === 'not_downloaded' ? '❌ Not Installed' :
+                         managedLLMStatus.status === 'error' ? '🔴 Error' : '⚪ Unknown'}
+                      </span>
+                      {managedLLMStatus.version && (
+                        <span className="version-info">v{managedLLMStatus.version}</span>
+                      )}
+                    </div>
+                    {managedLLMStatus.port && (
+                      <div className="server-info">
+                        <strong>Port:</strong> {managedLLMStatus.port}
+                        {managedLLMStatus.path && (
+                          <>
+                            <br />
+                            <strong>Path:</strong> {managedLLMStatus.path}
+                          </>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+                
+                <div className="server-controls">
+                  {managedLLMStatus?.status === 'not_downloaded' ? (
+                    <button 
+                      className="download-button"
+                      onClick={() => setShowDownloadDialog(true)}
+                      disabled={disabled}
+                    >
+                      Download Server
+                    </button>
+                  ) : (
+                    <>
+                      <button 
+                        className="start-button"
+                        onClick={handleStartServer}
+                        disabled={disabled || managedLLMStatus?.status === 'running'}
+                      >
+                        Start Server
+                      </button>
+                      <button 
+                        className="stop-button"
+                        onClick={handleStopServer}
+                        disabled={disabled || managedLLMStatus?.status !== 'running'}
+                      >
+                        Stop Server
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Server Configuration */}
+              {managedLLMStatus?.status !== 'not_downloaded' && (
+                <div className="config-section">
+                  <button
+                    type="button"
+                    className="advanced-settings-toggle"
+                    onClick={() => setServerConfigExpanded(!serverConfigExpanded)}
+                    disabled={disabled}
+                  >
+                    <span className="toggle-icon">{serverConfigExpanded ? '▼' : '▶'}</span>
+                    Server Configuration
+                  </button>
+                </div>
+              )}
+
+              {serverConfigExpanded && managedLLMStatus?.status !== 'not_downloaded' && (
+                <div className="config-advanced">
+                  <div className="config-section">
+                    <label className="config-label">
+                      Port
+                      <input
+                        type="number"
+                        className="config-input"
+                        value={currentManagedConfig.port}
+                        onChange={(e) => updateManagedConfig({ port: parseInt(e.target.value) || 8000 })}
+                        disabled={disabled}
+                      />
+                    </label>
+                  </div>
+                  
+                  <div className="config-section">
+                    <label className="config-label">
+                      Host
+                      <input
+                        type="text"
+                        className="config-input"
+                        value={currentManagedConfig.host}
+                        onChange={(e) => updateManagedConfig({ host: e.target.value })}
+                        disabled={disabled}
+                      />
+                    </label>
+                  </div>
+
+                  <div className="config-section">
+                    <label className="config-label">
+                      Model
+                      <input
+                        type="text"
+                        className="config-input"
+                        value={currentManagedConfig.model || ''}
+                        onChange={(e) => updateManagedConfig({ model: e.target.value || undefined })}
+                        placeholder="e.g., MaziyarPanahi/gemma-3-1b-it-GGUF"
+                        disabled={disabled}
+                      />
+                    </label>
+                    <div className="config-hint">
+                      Hugging Face model ID to download automatically
+                    </div>
+                  </div>
+
+                  <div className="config-section">
+                    <label className="config-label">
+                      Model Path (Optional)
+                      <input
+                        type="text"
+                        className="config-input"
+                        value={currentManagedConfig.model_path || ''}
+                        onChange={(e) => updateManagedConfig({ model_path: e.target.value || undefined })}
+                        placeholder="Path to local model file"
+                        disabled={disabled}
+                      />
+                    </label>
+                    <div className="config-hint">
+                      Override model download with local file path
+                    </div>
+                  </div>
+
+                  <div className="config-section">
+                    <label className="config-label">
+                      Log Level
+                      <select
+                        className="config-input"
+                        value={currentManagedConfig.log_level}
+                        onChange={(e) => updateManagedConfig({ log_level: e.target.value })}
+                        disabled={disabled}
+                      >
+                        <option value="debug">Debug</option>
+                        <option value="info">Info</option>
+                        <option value="warning">Warning</option>
+                        <option value="error">Error</option>
+                      </select>
+                    </label>
+                  </div>
+
+                  {/* Environment Variables */}
+                  <div className="config-section">
+                    <label className="config-label">
+                      Environment Variables
+                      <div className="env-vars-editor">
+                        {envVars.map((envVar, index) => (
+                          <div key={index} className="env-var-row">
+                            <input
+                              type="text"
+                              className="config-input env-key"
+                              value={envVar.key}
+                              onChange={(e) => updateEnvVar(index, 'key', e.target.value)}
+                              placeholder="Variable name"
+                              disabled={disabled}
+                            />
+                            <input
+                              type="text"
+                              className="config-input env-value"
+                              value={envVar.value}
+                              onChange={(e) => updateEnvVar(index, 'value', e.target.value)}
+                              placeholder="Value"
+                              disabled={disabled}
+                            />
+                            <button
+                              type="button"
+                              className="remove-env-var"
+                              onClick={() => removeEnvVar(index)}
+                              disabled={disabled}
+                            >
+                              ×
+                            </button>
+                          </div>
+                        ))}
+                        <button
+                          type="button"
+                          className="add-env-var"
+                          onClick={addEnvVar}
+                          disabled={disabled}
+                        >
+                          + Add Environment Variable
+                        </button>
+                      </div>
+                    </label>
+                    <div className="config-hint">
+                      Common variables: OLLAMA_MODEL, OLLAMA_FILENAME, OLLAMA_MODEL_PATH, OLLAMA_PORT, OLLAMA_HOST, OLLAMA_LOG_LEVEL
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
           {/* Test Connection */}
           {onTest && (
             <div className="config-section">
@@ -373,6 +684,15 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled, pro
           )}
         </div>
       )}
+
+      {/* Download Dialog */}
+      <ManagedLLMDialog
+        isOpen={showDownloadDialog}
+        onClose={() => setShowDownloadDialog(false)}
+        onDownloadComplete={() => {
+          loadManagedLLMStatus();
+        }}
+      />
     </div>
   );
 }

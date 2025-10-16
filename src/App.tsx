@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { classifyViaLLM, optimizeCategoriesViaLLM, LLMConfig, DEFAULT_CONFIGS, openFile, FileContent } from './api';
 import { invoke } from '@tauri-apps/api/tauri';
 import { listen } from '@tauri-apps/api/event';
-import { ScanState } from './types';
+import { ScanState, ManagedLLMConfig } from './types';
 import { LLMConfigPanel, HelpDialog, AboutDialog } from './components';
 
 function sanitizeFilename(name: string) {
@@ -84,6 +84,38 @@ export default function App() {
 
   const [llmConfig, setLlmConfig] = useState<LLMConfig>(loadLlmConfig());
   const [providerConfigs, setProviderConfigs] = useState<Record<string, LLMConfig>>(loadProviderConfigs());
+  
+  // Track if we've already attempted to start the server to prevent duplicates
+  const serverStartAttempted = useRef(false);
+  
+  // Managed LLM state
+  const [managedLLMConfig, setManagedLLMConfig] = useState<ManagedLLMConfig>(() => {
+    try {
+      const saved = localStorage.getItem('managedLLMConfig');
+      if (saved) {
+        const config = JSON.parse(saved);
+        // Migrate old field names to new snake_case format
+        const migratedConfig: ManagedLLMConfig = {
+          port: config.port || 8000,
+          host: config.host || '127.0.0.1',
+          model: config.model || 'MaziyarPanahi/gemma-3-1b-it-GGUF',
+          log_level: config.log_level || config.logLevel || 'info', // Support both old and new field names
+          model_path: config.model_path || config.modelPath,
+          env_vars: config.env_vars || config.envVars || {}
+        };
+        return migratedConfig;
+      }
+    } catch (error) {
+      console.error('Failed to load managed LLM config from localStorage:', error);
+    }
+    return {
+      port: 8000,
+      host: '127.0.0.1',
+      model: 'MaziyarPanahi/gemma-3-1b-it-GGUF',
+      log_level: 'info',
+      env_vars: {}
+    };
+  });
   const [directory, setDirectory] = useState<string | null>(null);
   const [includeSubdirectories, setIncludeSubdirectories] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -205,6 +237,96 @@ export default function App() {
       return updated;
     });
   }, [llmConfig]);
+
+  // Save managed LLM config to localStorage whenever it changes
+  useEffect(() => {
+    try {
+      localStorage.setItem('managedLLMConfig', JSON.stringify(managedLLMConfig));
+    } catch (error) {
+      console.error('Failed to save managed LLM config to localStorage:', error);
+    }
+  }, [managedLLMConfig]);
+
+  // Migrate old config format on first load
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('managedLLMConfig');
+      if (saved) {
+        const config = JSON.parse(saved);
+        // Check if we need to migrate (has old field names)
+        if (config.logLevel || config.modelPath || config.envVars) {
+          console.log('Migrating managed LLM config from old format...');
+          const migratedConfig: ManagedLLMConfig = {
+            port: config.port || 8000,
+            host: config.host || '127.0.0.1',
+            model: config.model || 'MaziyarPanahi/gemma-3-1b-it-GGUF',
+            log_level: config.log_level || config.logLevel || 'info',
+            model_path: config.model_path || config.modelPath,
+            env_vars: config.env_vars || config.envVars || {}
+          };
+          setManagedLLMConfig(migratedConfig);
+          // Save the migrated config immediately
+          localStorage.setItem('managedLLMConfig', JSON.stringify(migratedConfig));
+        }
+      }
+    } catch (error) {
+      console.error('Failed to migrate managed LLM config:', error);
+    }
+  }, []); // Run only once on mount
+
+  // Add a global function to clear config for debugging
+  useEffect(() => {
+    (window as any).clearManagedLLMConfig = () => {
+      localStorage.removeItem('managedLLMConfig');
+      window.location.reload();
+    };
+    (window as any).getManagedLLMConfig = () => {
+      return JSON.parse(localStorage.getItem('managedLLMConfig') || '{}');
+    };
+  }, []);
+
+  // Auto-start managed LLM server when provider changes to managed-local
+  useEffect(() => {
+    if (llmConfig.provider === 'managed-local') {
+      // Check if we've already attempted to start the server
+      if (serverStartAttempted.current) {
+        console.log('Server start already attempted, skipping duplicate attempt');
+        return;
+      }
+      
+      // Mark that we're attempting to start the server
+      serverStartAttempted.current = true;
+      
+      // Check if server is already running, if not, start it
+      const checkAndStartServer = async () => {
+        try {
+          const { getManagedLLMServerStatus, startManagedLLMServer } = await import('./api');
+          const status = await getManagedLLMServerStatus();
+          
+          console.log('Managed LLM server status:', status.status);
+          
+          if (status.status === 'stopped' || status.status === 'downloaded') {
+            // Auto-start the server
+            console.log('Starting managed LLM server with config:', managedLLMConfig);
+            await startManagedLLMServer(managedLLMConfig);
+            setEvents((prev: string[]) => ['Auto-started managed LLM server', ...prev]);
+          } else {
+            console.log('Server already running or starting, skipping auto-start');
+          }
+        } catch (error: any) {
+          console.error('Failed to auto-start managed LLM server:', error);
+          setEvents((prev: string[]) => [`Failed to auto-start server: ${error.message}`, ...prev]);
+          // Reset the flag on error so the user can try again
+          serverStartAttempted.current = false;
+        }
+      };
+      
+      checkAndStartServer();
+    } else {
+      // Reset the flag when switching away from managed-local
+      serverStartAttempted.current = false;
+    }
+  }, [llmConfig.provider]); // Removed managedLLMConfig from dependencies to prevent re-triggering
 
   // Function to load a provider's saved config
   const loadProviderConfig = (provider: string) => {
@@ -801,6 +923,8 @@ export default function App() {
                 disabled={busy}
                 providerConfigs={providerConfigs}
                 onLoadProviderConfig={loadProviderConfig}
+                managedLLMConfig={managedLLMConfig}
+                onManagedLLMConfigChange={setManagedLLMConfig}
               />
 
               {/* Directory Picker Section */}

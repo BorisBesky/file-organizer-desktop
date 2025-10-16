@@ -30,3 +30,24 @@ export interface ScanControl {
   currentFileIndex: number;
   processedFiles: any[];
 }
+
+// Managed LLM Server types
+export type LLMServerStatus = 'not_downloaded' | 'downloaded' | 'running' | 'stopped' | 'error';
+
+export interface ManagedLLMServerInfo {
+  status: LLMServerStatus;
+  version?: string;
+  path?: string;
+  port?: number;
+  error?: string;
+}
+
+export interface ManagedLLMConfig {
+  port: number;
+  host: string;
+  model?: string;
+  model_path?: string;
+  log_level: string;
+  // Environment variables for the server
+  env_vars: Record<string, string>;
+}

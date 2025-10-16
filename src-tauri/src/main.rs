@@ -8,14 +8,43 @@ use std::path::Path;
 use std::io::{Write, Read};
 use std::thread;
 use std::panic;
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Mutex, OnceLock, Arc};
+use std::process::{Child, Command, Stdio};
+use std::collections::HashMap;
 use tauri::api::dialog::FileDialogBuilder;
-use tauri::{command, AppHandle, Manager, CustomMenuItem, Menu, MenuItem, Submenu, WindowMenuEvent};
+use tauri::{command, AppHandle, Manager, CustomMenuItem, Menu, MenuItem, Submenu, WindowMenuEvent, State};
 use walkdir::WalkDir;
 use docx_rs::*;
 use calamine::{Reader, open_workbook, Xlsx};
 use image::GenericImageView;
 use base64::Engine;
+use serde::{Deserialize, Serialize};
+use zip::ZipArchive;
+use flate2::read::GzDecoder;
+use tar::Archive;
+
+// Managed LLM Server types
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ManagedLLMServerInfo {
+    pub status: String, // "not_downloaded" | "downloaded" | "running" | "stopped" | "error"
+    pub version: Option<String>,
+    pub path: Option<String>,
+    pub port: Option<u16>,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ManagedLLMConfig {
+    pub port: u16,
+    pub host: String,
+    pub model: Option<String>,
+    pub model_path: Option<String>,
+    pub log_level: String,
+    pub env_vars: HashMap<String, String>,
+}
+
+// Global state for the managed LLM server process
+type ManagedLLMState = Arc<Mutex<Option<Child>>>;
 
 #[command]
 async fn read_directory(path: String, include_subdirectories: bool) -> Result<Vec<String>, String> {
@@ -349,6 +378,393 @@ async fn open_file(path: String) -> Result<(), String> {
     Ok(())
 }
 
+// Managed LLM Server Commands
+
+#[command]
+async fn get_llm_server_status(app: AppHandle) -> Result<ManagedLLMServerInfo, String> {
+    let app_data_dir = app.path_resolver()
+        .app_data_dir()
+        .ok_or("Could not get app data directory")?;
+    
+    let server_dir = app_data_dir.join("llm-server");
+    
+    // Try multiple possible locations for the server executable
+    let possible_paths = if cfg!(target_os = "windows") {
+        vec![
+            server_dir.join("ollama_server").join("ollama_server.exe"),
+            server_dir.join("ollama_server.exe"),
+            server_dir.join("ollama_server").join("ollama_server").join("ollama_server.exe"),
+        ]
+    } else if cfg!(target_os = "macos") {
+        vec![
+            server_dir.join("mlx_server").join("mlx_server"),
+            server_dir.join("mlx_server"),
+            server_dir.join("mlx_server").join("mlx_server").join("mlx_server"),
+        ]
+    } else {
+        vec![
+            server_dir.join("ollama_server").join("ollama_server"),
+            server_dir.join("ollama_server"),
+            server_dir.join("ollama_server").join("ollama_server").join("ollama_server"),
+        ]
+    };
+    
+    let server_exe = possible_paths.iter().find(|path| path.exists()).cloned();
+    
+    eprintln!("Checking for server executable in possible paths:");
+    for (i, path) in possible_paths.iter().enumerate() {
+        eprintln!("  {}: {} (exists: {})", i, path.to_string_lossy(), path.exists());
+    }
+    eprintln!("Server directory exists: {}", server_dir.exists());
+    if server_dir.exists() {
+        eprintln!("Contents of server directory:");
+        if let Ok(entries) = fs::read_dir(&server_dir) {
+            for entry in entries.flatten() {
+                eprintln!("  - {}", entry.path().to_string_lossy());
+            }
+        }
+    }
+
+    let server_exe = match server_exe {
+        Some(path) => path,
+        None => {
+            return Ok(ManagedLLMServerInfo {
+                status: "not_downloaded".to_string(),
+                version: None,
+                path: None,
+                port: None,
+                error: None,
+            });
+        }
+    };
+
+    // Check if process is running by trying to connect to the default port
+    let default_port = 8000;
+    let client = reqwest::Client::new();
+    let test_url = format!("http://127.0.0.1:{}/v1/models", default_port);
+    
+    eprintln!("Testing server health at: {}", test_url);
+    match client.get(&test_url).timeout(std::time::Duration::from_secs(5)).send().await {
+        Ok(response) => {
+            eprintln!("Server responded with status: {}", response.status());
+            if response.status().is_success() {
+                Ok(ManagedLLMServerInfo {
+                    status: "running".to_string(),
+                    version: Some("1.0.0".to_string()), // TODO: Get actual version
+                    path: Some(server_exe.to_string_lossy().to_string()),
+                    port: Some(default_port),
+                    error: None,
+                })
+            } else {
+                eprintln!("Server responded but with error status: {}", response.status());
+                Ok(ManagedLLMServerInfo {
+                    status: "downloaded".to_string(),
+                    version: Some("1.0.0".to_string()),
+                    path: Some(server_exe.to_string_lossy().to_string()),
+                    port: Some(default_port),
+                    error: Some(format!("Server responded with status: {}", response.status())),
+                })
+            }
+        }
+        Err(e) => {
+            eprintln!("Failed to connect to server: {}", e);
+            Ok(ManagedLLMServerInfo {
+                status: "downloaded".to_string(),
+                version: Some("1.0.0".to_string()),
+                path: Some(server_exe.to_string_lossy().to_string()),
+                port: Some(default_port),
+                error: Some(format!("Connection failed: {}", e)),
+            })
+        }
+    }
+}
+
+#[command]
+async fn download_llm_server(app: AppHandle, version: String) -> Result<String, String> {
+    let app_data_dir = app.path_resolver()
+        .app_data_dir()
+        .ok_or("Could not get app data directory")?;
+    
+    let server_dir = app_data_dir.join("llm-server");
+    fs::create_dir_all(&server_dir).map_err(|e| format!("Failed to create server directory: {}", e))?;
+
+    // Determine platform and download URL
+    let (filename, extract_dir) = if cfg!(target_os = "windows") {
+        ("ollama_server-windows.zip", "ollama_server")
+    } else if cfg!(target_os = "macos") {
+        ("mlx_server-macos.tar.gz", "mlx_server")
+    } else {
+        ("ollama_server-linux.tar.gz", "ollama_server")
+    };
+
+    let download_url = format!(
+        "https://github.com/BorisBesky/file-organizer-desktop/releases/download/llm-v{}/{}",
+        version, filename
+    );
+    eprintln!("Download URL: {}", download_url);
+    eprintln!("Version: {}", version);
+    eprintln!("Filename: {}", filename);
+    eprintln!("Extract dir: {}", extract_dir);
+    eprintln!("Server dir: {}", server_dir.to_string_lossy());
+
+    let archive_path = server_dir.join(filename);
+    
+    // Download the file
+    let client = reqwest::Client::new();
+    let response = client.get(&download_url)
+        .send()
+        .await
+        .map_err(|e| format!("Failed to download server: {}", e))?;
+
+    if !response.status().is_success() {
+        return Err(format!("Download failed with status: {}", response.status()));
+    }
+
+    let mut file = fs::File::create(&archive_path)
+        .map_err(|e| format!("Failed to create archive file: {}", e))?;
+    
+    let content = response.bytes().await
+        .map_err(|e| format!("Failed to read response: {}", e))?;
+    
+    std::io::copy(&mut content.as_ref(), &mut file)
+        .map_err(|e| format!("Failed to write archive: {}", e))?;
+
+    // Extract the archive
+    let extract_path = server_dir.join(extract_dir);
+    if extract_path.exists() {
+        fs::remove_dir_all(&extract_path)
+            .map_err(|e| format!("Failed to remove existing server: {}", e))?;
+    }
+
+    if filename.ends_with(".zip") {
+        // Extract ZIP file (Windows)
+        let file = fs::File::open(&archive_path)
+            .map_err(|e| format!("Failed to open ZIP file: {}", e))?;
+        let mut archive = ZipArchive::new(file)
+            .map_err(|e| format!("Failed to read ZIP archive: {}", e))?;
+
+        for i in 0..archive.len() {
+            let mut file = archive.by_index(i)
+                .map_err(|e| format!("Failed to read file from ZIP: {}", e))?;
+            let outpath = extract_path.join(file.name());
+            
+            if file.name().ends_with('/') {
+                fs::create_dir_all(&outpath)
+                    .map_err(|e| format!("Failed to create directory: {}", e))?;
+            } else {
+                if let Some(p) = outpath.parent() {
+                    fs::create_dir_all(p)
+                        .map_err(|e| format!("Failed to create parent directory: {}", e))?;
+                }
+                let mut outfile = fs::File::create(&outpath)
+                    .map_err(|e| format!("Failed to create file: {}", e))?;
+                std::io::copy(&mut file, &mut outfile)
+                    .map_err(|e| format!("Failed to extract file: {}", e))?;
+            }
+        }
+    } else {
+        // Extract TAR.GZ file (Linux/macOS)
+        let file = fs::File::open(&archive_path)
+            .map_err(|e| format!("Failed to open TAR.GZ file: {}", e))?;
+        let gz = GzDecoder::new(file);
+        let mut archive = Archive::new(gz);
+        
+        archive.unpack(&server_dir)
+            .map_err(|e| format!("Failed to extract TAR.GZ: {}", e))?;
+    }
+
+    // Clean up archive file
+    fs::remove_file(&archive_path)
+        .map_err(|e| format!("Failed to remove archive: {}", e))?;
+
+    eprintln!("Extraction completed. Checking extracted files:");
+    if extract_path.exists() {
+        eprintln!("Extract path exists: {}", extract_path.to_string_lossy());
+        if let Ok(entries) = fs::read_dir(&extract_path) {
+            for entry in entries.flatten() {
+                eprintln!("  - {}", entry.path().to_string_lossy());
+            }
+        }
+    } else {
+        eprintln!("Extract path does not exist: {}", extract_path.to_string_lossy());
+    }
+
+    // Make executable on Unix systems
+    #[cfg(unix)]
+    {
+        let server_exe = if cfg!(target_os = "macos") {
+            extract_path.join("mlx_server")
+        } else {
+            extract_path.join("ollama_server")
+        };
+        
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = fs::metadata(&server_exe)
+            .map_err(|e| format!("Failed to get file metadata: {}", e))?
+            .permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&server_exe, perms)
+            .map_err(|e| format!("Failed to set executable permissions: {}", e))?;
+    }
+
+    Ok(extract_path.to_string_lossy().to_string())
+}
+
+#[command]
+async fn start_llm_server(
+    app: AppHandle,
+    config: ManagedLLMConfig,
+    state: State<'_, ManagedLLMState>
+) -> Result<String, String> {
+    eprintln!("Received config for starting server: {:?}", config);
+    
+    // Stop any existing server first
+    let _ = stop_llm_server(state.clone()).await;
+
+    let app_data_dir = app.path_resolver()
+        .app_data_dir()
+        .ok_or("Could not get app data directory")?;
+    
+    let server_dir = app_data_dir.join("llm-server");
+    let server_exe = if cfg!(target_os = "windows") {
+        server_dir.join("ollama_server").join("ollama_server").join("ollama_server.exe")
+    } else if cfg!(target_os = "macos") {
+        server_dir.join("mlx_server").join("mlx_server")
+    } else {
+        server_dir.join("ollama_server").join("ollama_server")
+    };
+
+    if !server_exe.exists() {
+        return Err("Server binary not found. Please download it first.".to_string());
+    }
+
+    // Set environment variables in the current process
+    std::env::set_var("OLLAMA_PORT", config.port.to_string());
+    std::env::set_var("OLLAMA_HOST", &config.host);
+    std::env::set_var("OLLAMA_LOG_LEVEL", &config.log_level);
+    
+    if let Some(model) = &config.model {
+        std::env::set_var("OLLAMA_MODEL", model);
+    }
+    if let Some(model_path) = &config.model_path {
+        std::env::set_var("OLLAMA_MODEL_PATH", model_path);
+    }
+
+    // Also prepare environment variables for the child process
+    let mut env_vars = config.env_vars.clone();
+    env_vars.insert("OLLAMA_PORT".to_string(), config.port.to_string());
+    env_vars.insert("OLLAMA_HOST".to_string(), config.host.clone());
+    env_vars.insert("OLLAMA_LOG_LEVEL".to_string(), config.log_level.clone());
+    
+    if let Some(model) = &config.model {
+        env_vars.insert("OLLAMA_MODEL".to_string(), model.clone());
+    }
+    if let Some(model_path) = &config.model_path {
+        env_vars.insert("OLLAMA_MODEL_PATH".to_string(), model_path.clone());
+    }
+
+    // Start the server process
+    eprintln!("Starting server with command: {:?}", server_exe);
+    eprintln!("Environment variables: {:?}", env_vars);
+    
+    // Try using inherit for stderr to see errors in real-time
+    let mut cmd = Command::new(&server_exe);
+    cmd.envs(&env_vars)
+        .stdout(Stdio::null())  // Ignore stdout
+        .stderr(Stdio::inherit()); // Show stderr in terminal
+
+    let mut child = cmd.spawn()
+        .map_err(|e| format!("Failed to start server: {}", e))?;
+
+    eprintln!("Server process started with PID: {:?}", child.id());
+
+    // Wait a moment to see if the process crashes immediately
+    tokio::time::sleep(tokio::time::Duration::from_secs(1)).await;
+    
+    // Check if the process is still running
+    match child.try_wait() {
+        Ok(Some(status)) => {
+            return Err(format!("Server process exited immediately with status: {}", status));
+        }
+        Ok(None) => {
+            eprintln!("Server process still running after 1 second");
+        }
+        Err(e) => {
+            return Err(format!("Error checking server status: {}", e));
+        }
+    }
+
+    // Store the process handle
+    {
+        let mut state_guard = state.lock().unwrap();
+        *state_guard = Some(child);
+    }
+
+    eprintln!("Server process stored, waiting for initialization...");
+    
+    // Give the server more time to start up
+    tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
+    
+    // Test if the server is responding
+    let test_url = format!("http://{}:{}/v1/models", config.host, config.port);
+    eprintln!("Testing server startup at: {}", test_url);
+    
+    let client = reqwest::Client::new();
+    match client.get(&test_url).timeout(std::time::Duration::from_secs(10)).send().await {
+        Ok(response) => {
+            eprintln!("Server startup test successful: {}", response.status());
+        }
+        Err(e) => {
+            eprintln!("Server startup test failed: {}", e);
+        }
+    }
+
+    Ok(format!("Server started on {}:{}", config.host, config.port))
+}
+
+#[command]
+async fn stop_llm_server(state: State<'_, ManagedLLMState>) -> Result<String, String> {
+    let mut state_guard = state.lock().unwrap();
+    
+    eprintln!("Attempting to stop LLM server...");
+    
+    if let Some(mut child) = state_guard.take() {
+        let pid = child.id();
+        eprintln!("Found server process with PID: {}", pid);
+        
+        match child.kill() {
+            Ok(_) => {
+                eprintln!("Kill signal sent to PID: {}", pid);
+                let _ = child.wait(); // Wait for process to actually terminate
+                eprintln!("Server process terminated");
+                
+                // On Windows, also kill the process tree using taskkill
+                #[cfg(target_os = "windows")]
+                {
+                    let _ = std::process::Command::new("taskkill")
+                        .args(&["/F", "/T", "/PID", &pid.to_string()])
+                        .output();
+                    eprintln!("Sent taskkill command to terminate process tree");
+                }
+                
+                Ok("Server stopped".to_string())
+            }
+            Err(e) => {
+                eprintln!("Failed to kill server process: {}", e);
+                Err(format!("Failed to stop server: {}", e))
+            }
+        }
+    } else {
+        eprintln!("No server process found in state");
+        Ok("Server was not running".to_string())
+    }
+}
+
+#[command]
+async fn get_llm_server_info(app: AppHandle) -> Result<ManagedLLMServerInfo, String> {
+    get_llm_server_status(app).await
+}
+
 fn create_menu() -> Menu {
     let help_menu = Menu::new()
         .add_item(CustomMenuItem::new("show_help".to_string(), "File Organizer Help"))
@@ -419,6 +835,7 @@ fn main() {
     tauri::Builder::default()
         .menu(menu)
         .on_menu_event(handle_menu_event)
+        .manage(Arc::new(Mutex::new(None::<Child>)) as ManagedLLMState)
         .invoke_handler(tauri::generate_handler![
             read_directory,
             pick_directory,
@@ -426,7 +843,12 @@ fn main() {
             move_file,
             http_request,
             save_diagnostic_logs,
-            open_file
+            open_file,
+            get_llm_server_status,
+            download_llm_server,
+            start_llm_server,
+            stop_llm_server,
+            get_llm_server_info
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
