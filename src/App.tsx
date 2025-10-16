@@ -390,10 +390,28 @@ export default function App() {
     // Handle resume after a stop without recreating state
     if (scanState === 'stopped') {
       try {
+        // Merge user edits from rows back into processedFiles before resuming
+        const rowsBySrc = new Map(rows.map(row => [row.src, row]));
+        scanControlRef.current.processedFiles = scanControlRef.current.processedFiles.map(file => {
+          const editedRow = rowsBySrc.get(file.src);
+          if (editedRow && file.llm) {
+            // User edited this file, update the LLM result with user changes
+            return {
+              ...file,
+              llm: {
+                ...file.llm,
+                category_path: editedRow.category,
+                suggested_filename: editedRow.name,
+              }
+            };
+          }
+          return file;
+        });
+        
         scanControlRef.current.shouldStop = false;
         setBusy(true);
         setScanState('scanning');
-        setEvents((prev: string[]) => ['Resuming scan', ...prev]);
+        setEvents((prev: string[]) => ['Resuming scan with your changes...', ...prev]);
         setProgress({ current: scanControlRef.current.currentFileIndex, total: scanControlRef.current.allFiles.length });
         await processRemainingFiles();
       } catch (error: any) {
