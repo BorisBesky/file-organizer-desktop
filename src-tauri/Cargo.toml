@@ -29,3 +29,12 @@ base64 = "0.22"
 # this feature is used for production builds or when `devPath` points to the filesystem
 # DO NOT REMOVE!!
 custom-protocol = ["tauri/custom-protocol"]
+
+# Development profile optimizations for faster compilation
+[profile.dev]
+opt-level = 1              # Enable basic optimizations for faster runtime
+incremental = true         # Enable incremental compilation (default, but explicit)
+codegen-units = 256        # Maximize parallelism during compilation
+
+[profile.dev.package."*"]
+opt-level = 3              # Optimize dependencies fully (they don't change often)

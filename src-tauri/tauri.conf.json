@@ -44,7 +44,8 @@
         "resizable": true,
         "fullscreen": false,
         "decorations": true,
-        "center": true
+        "center": true,
+        "visible": true
       }
     ]
   }
