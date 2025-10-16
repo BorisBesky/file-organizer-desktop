@@ -297,7 +297,7 @@ export default function App() {
   const finalizeScan = async () => {
     setProgress({ current: scanControlRef.current.currentFileIndex, total: scanControlRef.current.allFiles.length });
     setBusy(false);
-    setScanState('completed');
+    // Don't change scanState here - it should already be set to 'stopped' or 'completed'
   };
 
   const processRemainingFiles = async () => {
@@ -312,6 +312,7 @@ export default function App() {
       
       if (scanControlRef.current.shouldStop) {
         scanControlRef.current.currentFileIndex = i;
+        setScanState('stopped'); // Ensure state is set before finalizing
         await finalizeScan();
         return;
       }
