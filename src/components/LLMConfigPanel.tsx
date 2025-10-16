@@ -136,7 +136,7 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled, pro
   };
 
   return (
-    <div className="llm-config-panel">
+    <div className={`llm-config-panel ${isExpanded ? 'expanded' : ''}`}>
       <div className="llm-config-header">
         <button
           type="button"
