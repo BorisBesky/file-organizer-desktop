@@ -175,7 +175,6 @@ export default function App() {
   // Scan control state
   const [scanState, setScanState] = useState<ScanState>('idle');
   const scanControlRef = useRef({
-    shouldPause: false,
     shouldStop: false,
     currentFileIndex: 0,
     processedFiles: [] as any[],
@@ -241,32 +240,11 @@ export default function App() {
     invoke('pick_directory');
   };
 
-  const pauseScan = () => {
+  const stopScan = () => {
     if (scanState === 'scanning') {
-      scanControlRef.current.shouldPause = true;
-      setScanState('paused');
-      setEvents((prev: string[]) => ['Scan paused by user', ...prev]);
-    }
-  };
-
-  const resumeScan = () => {
-    if (scanState === 'paused') {
-      scanControlRef.current.shouldPause = false;
-      setScanState('scanning');
-      setEvents((prev: string[]) => ['Scan resumed', ...prev]);
-      // Continue processing from where we left off
-      processRemainingFiles();
-    }
-  };
-
-  const stopScan = async () => {
-    if (scanState === 'scanning' || scanState === 'paused') {
       scanControlRef.current.shouldStop = true;
       setScanState('stopped');
       setEvents((prev: string[]) => ['Scan stopped by user', ...prev]);
-      
-      // Show current progress
-      await finalizeScan();
     }
   };
 
@@ -304,12 +282,7 @@ export default function App() {
     const { allFiles, currentFileIndex, processedFiles, used } = scanControlRef.current;
     
     for (let i = currentFileIndex; i < allFiles.length; i++) {
-      // Check for pause or stop signals
-      if (scanControlRef.current.shouldPause) {
-        scanControlRef.current.currentFileIndex = i;
-        return;
-      }
-      
+      // Check for stop signal
       if (scanControlRef.current.shouldStop) {
         scanControlRef.current.currentFileIndex = i;
         setScanState('stopped'); // Ensure state is set before finalizing
@@ -409,18 +382,37 @@ export default function App() {
 
 
   const scan = async () => {
-    if (!directory) return alert('Pick a directory first');
-    
-    // Reset scan control state
+    if (!directory) {
+      alert('Pick a directory first');
+      return;
+    }
+
+    // Handle resume after a stop without recreating state
+    if (scanState === 'stopped') {
+      try {
+        scanControlRef.current.shouldStop = false;
+        setBusy(true);
+        setScanState('scanning');
+        setEvents((prev: string[]) => ['Resuming scan', ...prev]);
+        setProgress({ current: scanControlRef.current.currentFileIndex, total: scanControlRef.current.allFiles.length });
+        await processRemainingFiles();
+      } catch (error: any) {
+        setEvents((prev: string[]) => [`Error resuming scan: ${error.message || String(error)}`, ...prev]);
+        setBusy(false);
+        setScanState('stopped');
+      }
+      return;
+    }
+
+    // Starting a brand new scan
     scanControlRef.current = {
-      shouldPause: false,
       shouldStop: false,
       currentFileIndex: 0,
       processedFiles: [],
       allFiles: [],
       used: new Set<string>(),
     };
-    
+
     setBusy(true);
     setScanState('scanning');
     setEvents([]);
@@ -430,12 +422,12 @@ export default function App() {
     try {
       const files: string[] = await invoke('read_directory', { path: directory, includeSubdirectories: includeSubdirectories });
       const processableFiles = files.filter(f => !splitPath(f).name.startsWith('.'));
-      
+
       scanControlRef.current.allFiles = processableFiles;
       setProgress({ current: 0, total: processableFiles.length });
-      
+
       setEvents((prev: string[]) => [`Found ${processableFiles.length} files to process`, ...prev]);
-      
+
       // Start processing files
       await processRemainingFiles();
     } catch (error: any) {
@@ -563,7 +555,6 @@ export default function App() {
     setProgress({ current: 0, total: 0 });
     setBusy(false);
     scanControlRef.current = {
-      shouldPause: false,
       shouldStop: false,
       currentFileIndex: 0,
       processedFiles: [],
@@ -691,8 +682,6 @@ export default function App() {
                   ? 'File Analysis Completed' 
                   : scanState === 'stopped'
                   ? 'File Analysis Stopped'
-                  : scanState === 'paused'
-                  ? 'File Analysis Paused'
                   : `Progress - ${scanState.charAt(0).toUpperCase() + scanState.slice(1)}`
                 }
               </div>
@@ -709,10 +698,8 @@ export default function App() {
                   ? `Successfully analyzed ${progress.total} files`
                   : scanState === 'stopped'
                   ? `Analyzed ${progress.current} of ${progress.total} files before stopping`
-                  : scanState === 'paused'
-                  ? `Paused at ${progress.current} / ${progress.total} files`
                   : `${progress.current} / ${progress.total} files`
-                } {scanState !== 'completed' && scanState !== 'stopped' && scanState !== 'paused' && `(${Math.round((progress.current / progress.total) * 100)}%)`}
+                } {scanState !== 'completed' && scanState !== 'stopped' && `(${Math.round((progress.current / progress.total) * 100)}%)`}
               </div>
             </div>
           )}
@@ -782,7 +769,7 @@ export default function App() {
               {/* Directory Picker Section */}
               <div className="sidebar-section">
                 <h3>Directory</h3>
-                <button onClick={pickDirectory} disabled={busy} className="w-full">
+                <button onClick={pickDirectory} disabled={busy || scanState === 'scanning' || scanState === 'stopped'} className="w-full">
                   Pick Directory
                 </button>
                 {directory && (
@@ -793,7 +780,7 @@ export default function App() {
                     type="checkbox" 
                     checked={includeSubdirectories} 
                     onChange={e => setIncludeSubdirectories(e.target.checked)}
-                    disabled={busy || scanState === 'scanning' || scanState === 'paused'}
+                    disabled={busy || scanState === 'scanning' || scanState === 'stopped'}
                   />
                   Include subdirectories
                 </label>
@@ -805,31 +792,17 @@ export default function App() {
                 <div className="button-column">
                   <button 
                     onClick={scan} 
-                    disabled={busy || !directory || scanState === 'scanning' || scanState === 'paused'}
+                    disabled={busy || !directory || scanState === 'scanning'}
                     className="w-full"
                   >
-                    {scanState === 'scanning' ? 'Scanning...' : scanState === 'paused' ? 'Paused' : 'Start Scan'}
+                    {scanState === 'scanning' ? 'Scanning...' : scanState === 'stopped' ? 'Resume Scan' : 'Start Scan'}
                   </button>
                   
                   {scanState === 'scanning' && (
-                    <>
-                      <button className="warning w-full" onClick={pauseScan} disabled={!busy}>Pause</button>
-                      <button className="danger w-full" onClick={stopScan} disabled={!busy}>Stop</button>
-                    </>
+                    <button className="danger w-full" onClick={stopScan} disabled={!busy}>Stop</button>
                   )}
                   
-                  {scanState === 'paused' && (
-                    <>
-                      <button className="w-full" onClick={resumeScan}>Resume</button>
-                      <button className="danger w-full" onClick={stopScan}>Stop</button>
-                    </>
-                  )}
-                  
-                  {scanState === 'stopped' && (
-                    <button className="w-full" onClick={resumeScan}>Continue Scan</button>
-                  )}
-                  
-                  {scanState === 'completed' && (
+                  {(scanState === 'completed' || scanState === 'stopped') && (
                     <button className="secondary w-full" onClick={resetScan}>New Scan</button>
                   )}
                 </div>
