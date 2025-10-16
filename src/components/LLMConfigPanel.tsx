@@ -108,9 +108,9 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled, pro
     }
   }, []);
 
-  // Load managed LLM status when provider is managed-local
+  // Load managed LLM status when provider is managed-local and panel is expanded
   useEffect(() => {
-    if (config.provider === 'managed-local') {
+    if (config.provider === 'managed-local' && isExpanded) {
       loadManagedLLMStatus();
       
       // Set up periodic status refresh to keep UI in sync
@@ -118,9 +118,13 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled, pro
         loadManagedLLMStatus();
       }, 5000); // Refresh every 5 seconds
       
-      return () => clearInterval(intervalId);
+      // Cleanup: stop polling when provider changes, panel collapses, or component unmounts
+      return () => {
+        clearInterval(intervalId);
+        console.log('Stopped managed LLM status polling');
+      };
     }
-  }, [config.provider, loadManagedLLMStatus]);
+  }, [config.provider, isExpanded, loadManagedLLMStatus]);
 
   // Initialize env vars from config
   useEffect(() => {
