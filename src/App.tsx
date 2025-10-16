@@ -676,97 +676,97 @@ export default function App() {
     <div className="app-layout">
       {/* Progress/Status Header */}
       <div className="app-header">
-        {(busy || scanState !== 'idle') && progress.total > 0 && (
-          <div className="header-progress">
-            <div className="progress-label">
-              {scanState === 'completed' 
-                ? 'File Analysis Completed' 
-                : scanState === 'stopped'
-                ? 'File Analysis Stopped'
-                : scanState === 'paused'
-                ? 'File Analysis Paused'
-                : `Progress - ${scanState.charAt(0).toUpperCase() + scanState.slice(1)}`
-              }
+        <button 
+          className="sidebar-collapse-toggle" 
+          onClick={toggleSidebarCollapse}
+          title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+        >
+          {sidebarCollapsed ? '▶' : '◀'}
+        </button>
+        <div className="header-content">
+          {(busy || scanState !== 'idle') && progress.total > 0 && (
+            <div className="header-progress">
+              <div className="progress-label">
+                {scanState === 'completed' 
+                  ? 'File Analysis Completed' 
+                  : scanState === 'stopped'
+                  ? 'File Analysis Stopped'
+                  : scanState === 'paused'
+                  ? 'File Analysis Paused'
+                  : `Progress - ${scanState.charAt(0).toUpperCase() + scanState.slice(1)}`
+                }
+              </div>
+              <div className="progress-container">
+                <div 
+                  className={`progress-bar ${scanState === 'completed' ? 'progress-bar-completed' : scanState === 'stopped' ? 'progress-bar-stopped' : ''}`}
+                  style={{ width: `${(progress.current / progress.total) * 100}%` }}
+                />
+              </div>
+              <div className="progress-text">
+                {scanState === 'organizing' 
+                  ? `${progress.current} out of ${progress.total} files moved`
+                  : scanState === 'completed'
+                  ? `Successfully analyzed ${progress.total} files`
+                  : scanState === 'stopped'
+                  ? `Analyzed ${progress.current} of ${progress.total} files before stopping`
+                  : scanState === 'paused'
+                  ? `Paused at ${progress.current} / ${progress.total} files`
+                  : `${progress.current} / ${progress.total} files`
+                } {scanState !== 'completed' && scanState !== 'stopped' && scanState !== 'paused' && `(${Math.round((progress.current / progress.total) * 100)}%)`}
+              </div>
             </div>
-            <div className="progress-container">
-              <div 
-                className={`progress-bar ${scanState === 'completed' ? 'progress-bar-completed' : scanState === 'stopped' ? 'progress-bar-stopped' : ''}`}
-                style={{ width: `${(progress.current / progress.total) * 100}%` }}
-              />
+          )}
+          
+          {isOptimizing && (
+            <div className="header-progress">
+              <div className="progress-label">
+                Optimizing Directory Structure
+              </div>
+              <div className="progress-container">
+                <div className="progress-bar progress-bar-indeterminate" />
+              </div>
+              <div className="progress-text">
+                Analyzing categories and generating optimization suggestions...
+                <button 
+                  className="cancel-optimization-btn"
+                  onClick={cancelOptimization}
+                  title="Cancel optimization"
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
-            <div className="progress-text">
-              {scanState === 'organizing' 
-                ? `${progress.current} out of ${progress.total} files moved`
-                : scanState === 'completed'
-                ? `Successfully analyzed ${progress.total} files`
-                : scanState === 'stopped'
-                ? `Analyzed ${progress.current} of ${progress.total} files before stopping`
-                : scanState === 'paused'
-                ? `Paused at ${progress.current} / ${progress.total} files`
-                : `${progress.current} / ${progress.total} files`
-              } {scanState !== 'completed' && scanState !== 'stopped' && scanState !== 'paused' && `(${Math.round((progress.current / progress.total) * 100)}%)`}
-            </div>
-          </div>
-        )}
-        
-        {isOptimizing && (
-          <div className="header-progress">
-            <div className="progress-label">
-              Optimizing Directory Structure
-            </div>
-            <div className="progress-container">
-              <div className="progress-bar progress-bar-indeterminate" />
-            </div>
-            <div className="progress-text">
-              Analyzing categories and generating optimization suggestions...
-              <button 
-                className="cancel-optimization-btn"
-                onClick={cancelOptimization}
-                title="Cancel optimization"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
+          )}
 
-        {!!events.length && (
-          <div className="header-status">
-            <button
-              type="button"
-              className="status-toggle"
-              onClick={() => setStatusExpanded(!statusExpanded)}
-            >
-              <span className="toggle-icon">{statusExpanded ? '▼' : '▶'}</span>
-              <span>Status Log</span>
-            </button>
-            {statusExpanded && (
-              <textarea
-                readOnly
-                rows={4}
-                value={events.join('\n')}
-                className="status-textarea"
-                aria-label="Status events log"
-                title="Status events log"
-              />
-            )}
-          </div>
-        )}
+          {!!events.length && (
+            <div className="header-status">
+              <button
+                type="button"
+                className="status-toggle"
+                onClick={() => setStatusExpanded(!statusExpanded)}
+              >
+                <span className="toggle-icon">{statusExpanded ? '▼' : '▶'}</span>
+                <span>Status Log</span>
+              </button>
+              {statusExpanded && (
+                <textarea
+                  readOnly
+                  rows={4}
+                  value={events.join('\n')}
+                  className="status-textarea"
+                  aria-label="Status events log"
+                  title="Status events log"
+                />
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Main Layout: Sidebar + Content */}
       <div className="app-main">
         {/* Left Sidebar */}
         <aside className="app-sidebar" style={{ width: sidebarCollapsed ? '0px' : `${sidebarWidth}px` }}>
-          {/* Collapse/Expand Toggle */}
-          <button 
-            className="sidebar-collapse-toggle" 
-            onClick={toggleSidebarCollapse}
-            title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-          >
-            {sidebarCollapsed ? '▶' : '◀'}
-          </button>
-          
           {!sidebarCollapsed && (
             <>
               {/* LLM Configuration */}
