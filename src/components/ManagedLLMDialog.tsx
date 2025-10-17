@@ -89,17 +89,6 @@ export default function ManagedLLMDialog({ isOpen, onClose, onDownloadComplete }
             <div className="info-row">
               <strong>Size:</strong> ~50-100 MB (varies by platform)
             </div>
-            <div className="info-row">
-              <strong>Source:</strong> 
-              <a
-                href={`https://github.com/BorisBesky/file-organizer-desktop/releases/tag/llm-v${version}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="github-link"
-              >
-                GitHub Releases
-              </a>
-            </div>
           </div>
 
           {isDownloading && (

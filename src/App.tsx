@@ -897,15 +897,15 @@ export default function App() {
           )}
           
           <div className="header-toggle-container">
-            <button className="theme-toggle" onClick={toggleTheme} title={`Switch to ${theme === 'light' ? 'Dark' : 'Light'} Mode`}>
-              {theme === 'light' ? '☀️' : '🌙'}
-            </button>
             <button 
-              className="sidebar-collapse-toggle" 
+              className="theme-toggle" 
               onClick={toggleSidebarCollapse}
               title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
             >
               {sidebarCollapsed ? '▶' : '◀'}
+            </button>
+            <button className="theme-toggle" onClick={toggleTheme} title={`Switch to ${theme === 'light' ? 'Dark' : 'Light'} Mode`}>
+              {theme === 'light' ? '☀️' : '🌙'}
             </button>
             <div className="header-scan-buttons">
               <button 
