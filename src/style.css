@@ -775,7 +775,7 @@ label input[type="checkbox"] {
 
 .progress-text {
   font-size: 13px;
-  color: var(--text-secondary);
+  color: var(--text-primary);
   margin-top: 4px;
   display: flex;
   align-items: center;
@@ -1703,7 +1703,7 @@ label input[type="checkbox"] {
 
 .progress-label {
   font-size: 13px;
-  color: #1d1d1f;
+  color: var(--text-primary);
   margin-bottom: 8px;
   font-weight: 500;
 }
