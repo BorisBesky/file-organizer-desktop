@@ -61,8 +61,8 @@ export default function App() {
     }
     // Return default config if no saved config exists
     return {
-      provider: 'lmstudio',
-      baseUrl: 'http://localhost:1234',
+      provider: 'managed-local',
+      baseUrl: 'http://127.0.0.1:8000',
       model: 'local-model',
       maxTokens: 4096,
       maxTextLength: 4096,
@@ -804,6 +804,20 @@ export default function App() {
     }
   };
 
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    const savedTheme = localStorage.getItem('appTheme');
+    return (savedTheme === 'dark' || savedTheme === 'light') ? savedTheme : 'light';
+  });
+
+  useEffect(() => {
+    document.body.classList.toggle('dark-theme', theme === 'dark');
+    localStorage.setItem('appTheme', theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme(prev => prev === 'light' ? 'dark' : 'light');
+  };
+
   return (
     <div className="app-layout">
       {/* Progress/Status Header */}
@@ -883,6 +897,9 @@ export default function App() {
           )}
           
           <div className="header-toggle-container">
+            <button className="theme-toggle" onClick={toggleTheme} title={`Switch to ${theme === 'light' ? 'Dark' : 'Light'} Mode`}>
+              {theme === 'light' ? '☀️' : '🌙'}
+            </button>
             <button 
               className="sidebar-collapse-toggle" 
               onClick={toggleSidebarCollapse}
@@ -930,7 +947,6 @@ export default function App() {
 
               {/* Directory Picker Section */}
               <div className="sidebar-section">
-                <h3>Directory</h3>
                 <button onClick={pickDirectory} disabled={busy || scanState === 'scanning' || scanState === 'stopped'} className="w-full">
                   Pick Directory
                 </button>

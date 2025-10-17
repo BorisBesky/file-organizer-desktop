@@ -21,13 +21,15 @@ export default function AboutDialog({ isOpen, onClose }: AboutDialogProps) {
           <h3>AI File Organizer</h3>
           <p className="version">Version 0.1.0</p>
           <p className="description">
-            An intelligent file organization assistant powered by AI. 
-            Automatically categorize and rename your files using advanced language models.
+            An intelligent file organization assistant powered by AI.
+            Automatically categorize and rename your files using advanced language models,
+            including local servers that run entirely on your machine.
           </p>
           
           <div className="about-features">
             <h4>Supported AI Providers:</h4>
             <ul>
+              <li>Managed Local LLM (Auto-managed local server)</li>
               <li>LM Studio (Local)</li>
               <li>Ollama (Local)</li>
               <li>OpenAI</li>

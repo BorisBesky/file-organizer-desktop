@@ -145,6 +145,18 @@ Refer to the [Tauri documentation](https://tauri.app/v1/guides/distribution/sign
 - Use the application to select a directory and organize files based on AI classification.
 - Review and edit proposed file names and categories before applying changes.
 
+### LLM Provider Options
+The application supports multiple AI providers for file classification:
+
+- **Managed Local LLM**: Run a local LLM server automatically managed by the app. No manual setup required - select a model and the server will be downloaded and started automatically.
+- **LM Studio**: Local AI server. Start LM Studio and load a model first (default: http://localhost:1234)
+- **Ollama**: Local AI server. Install and run Ollama with a model like llama2 or mistral (default: http://localhost:11434)
+- **OpenAI**: Cloud service requiring API key from platform.openai.com
+- **Anthropic (Claude)**: Cloud service requiring API key from console.anthropic.com
+- **Groq**: Fast cloud inference requiring API key from console.groq.com
+- **Google Gemini**: Google AI service requiring API key from ai.google.dev
+- **Custom**: Any OpenAI-compatible API endpoint
+
 ### Scan Control Features
 The application now supports advanced scan control:
 

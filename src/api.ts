@@ -105,6 +105,7 @@ function getCompletionEndpoint(config: LLMConfig): string {
     case 'openai':
     case 'groq':
     case 'lmstudio':
+    case 'managed-local':
     default:
       return `${base}/v1/chat/completions`;
   }
@@ -290,9 +291,7 @@ function buildRequestBody(config: LLMConfig, prompt: string, systemMessage: stri
           temperature: 0.2,
           stream: false,
         };
-        if (config.provider !== 'lmstudio') {
-          body.max_tokens = config.maxTokens ?? 4096;
-        }
+        body.max_tokens = config.maxTokens ?? 4096;
         return body;
       }
   }

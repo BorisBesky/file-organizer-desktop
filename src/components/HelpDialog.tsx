@@ -47,7 +47,7 @@ export default function HelpDialog({ isOpen, onClose }: HelpDialogProps) {
           <section className="help-section">
             <h3>Quick Start</h3>
             <ol>
-              <li><strong>Configure LLM Provider:</strong> Expand the LLM Provider section and select your preferred AI service (LM Studio, Ollama, OpenAI, Anthropic, Groq, Gemini, or Custom).</li>
+              <li><strong>Configure LLM Provider:</strong> Expand the LLM Provider section and select your preferred AI service (Managed Local LLM, LM Studio, Ollama, OpenAI, Anthropic, Groq, Gemini, or Custom).</li>
               <li><strong>Pick Directory:</strong> Click "Pick Directory" to select the folder containing files you want to organize.</li>
               <li><strong>Scan Files:</strong> Click "Scan" to analyze your files. The AI will categorize them and suggest new filenames.</li>
               <li><strong>Review & Edit:</strong> Check the suggestions in the table. You can modify categories and filenames as needed.</li>
@@ -69,6 +69,7 @@ export default function HelpDialog({ isOpen, onClose }: HelpDialogProps) {
           <section className="help-section">
             <h3>LLM Providers</h3>
             <ul>
+              <li><strong>Managed Local LLM:</strong> Run a local LLM server automatically managed by the app. Select a model and the server will be downloaded and started automatically. Runs on localhost:8000.</li>
               <li><strong>LM Studio:</strong> Local AI server. Start LM Studio and load a model first. Default: http://localhost:1234</li>
               <li><strong>Ollama:</strong> Local AI server. Install and run Ollama with a model like llama2 or mistral. Default: http://localhost:11434</li>
               <li><strong>OpenAI:</strong> Cloud service. Requires API key from platform.openai.com. Models: GPT-4, GPT-3.5-turbo.</li>
@@ -99,6 +100,7 @@ export default function HelpDialog({ isOpen, onClose }: HelpDialogProps) {
               <li>Edit categories and filenames in the table before applying changes.</li>
               <li>The app skips hidden files (starting with ".").</li>
               <li>Only text-readable files are classified. Binary files are skipped but logged.</li>
+              <li>For the Managed Local LLM option, the app will automatically download and start a server for you - no manual setup required.</li>
             </ul>
           </section>
 
