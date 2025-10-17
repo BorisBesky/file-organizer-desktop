@@ -3,3 +3,4 @@ dist
 src-tauri/target
 src-tauri/target/.*
 src-tauri/target/.rustc_info.json
+.DS_Store

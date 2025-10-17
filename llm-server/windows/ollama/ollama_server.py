@@ -33,12 +33,12 @@ def parse_args():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Environment variables (overridden by command-line arguments):
-  OLLAMA_MODEL        Model to use (default: %(default_model)s)
-  OLLAMA_FILENAME     Filename to use (default: %(default_filename)s)
-  OLLAMA_MODEL_PATH   Path to externally provided model (skips download)
-  OLLAMA_PORT         Port to listen on (default: %(default_port)s)
-  OLLAMA_LOG_LEVEL    Log level (default: %(default_log_level)s)
-  OLLAMA_HOST         Host to listen on (default: %(default_host)s)
+  SERVER_MODEL        Model to use (default: %(default_model)s)
+  SERVER_FILENAME     Filename to use (default: %(default_filename)s)
+  SERVER_MODEL_PATH   Path to externally provided model (skips download)
+  SERVER_PORT         Port to listen on (default: %(default_port)s)
+  SERVER_LOG_LEVEL    Log level (default: %(default_log_level)s)
+  SERVER_HOST         Host to listen on (default: %(default_host)s)
         """ % {
             'default_model': default_model_id,
             'default_filename': default_filename,
@@ -97,20 +97,20 @@ Environment variables (overridden by command-line arguments):
 # Priority: command-line args > environment variables > defaults
 args = parse_args()
 
-model_path_arg = args.model_path or os.environ.get('OLLAMA_MODEL_PATH')
+model_path_arg = args.model_path or os.environ.get('SERVER_MODEL_PATH')
 
 if not model_path_arg:
-    model_id = args.model or os.environ.get('OLLAMA_MODEL', default_model_id)
-    filename = args.filename or os.environ.get('OLLAMA_FILENAME', default_filename)
+    model_id = args.model or os.environ.get('SERVER_MODEL', default_model_id)
+    filename = args.filename or os.environ.get('SERVER_FILENAME', default_filename)
     model_path = hf_hub_download(repo_id=model_id, filename=filename)
     print(f"Downloaded {model_id} file to: {model_path}")
 else:
     model_path = model_path_arg
     print(f"Using {model_path} model")
 
-port_number = args.port if args.port is not None else int(os.environ.get('OLLAMA_PORT', default_port))
-log_level = args.log_level or os.environ.get('OLLAMA_LOG_LEVEL', default_log_level)
-hostname = args.host or os.environ.get('OLLAMA_HOST', default_host)
+port_number = args.port if args.port is not None else int(os.environ.get('SERVER_PORT', default_port))
+log_level = args.log_level or os.environ.get('SERVER_LOG_LEVEL', default_log_level)
+hostname = args.host or os.environ.get('SERVER_HOST', default_host)
 
 # Initialize the Llama model once
 llama = Llama(
