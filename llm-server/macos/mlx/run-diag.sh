@@ -1,7 +1,7 @@
 #!/bin/bash
 
-HOST=${MLX_SERVER_HOST:-127.0.0.1}
-PORT=${MLX_SERVER_PORT:-8080}
+HOST=${SERVER_HOST:-127.0.0.1}
+PORT=${SERVER_PORT:-8000}
 
 ./dist/mlx_server/mlx_server > /tmp/mlx_server_test.log 2>&1 &
 SERVER_PID=$!

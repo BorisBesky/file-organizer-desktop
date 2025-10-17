@@ -608,7 +608,7 @@ export async function listOllamaModels(baseUrl: string): Promise<string[]> {
     }
     return [];
   } catch (e) {
-    console.warn('Failed to list Ollama models', e);
+    debugLogger.warn('API', 'Failed to list Ollama models', { error: e });
     return [];
   }
 }
@@ -627,7 +627,7 @@ export async function listLMStudioModels(baseUrl: string): Promise<string[]> {
     }
     return [];
   } catch (e) {
-    console.warn('Failed to list LM Studio models', e);
+    debugLogger.warn('API', 'Failed to list LM Studio models', { error: e });
     return [];
   }
 }

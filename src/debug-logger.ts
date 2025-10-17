@@ -14,7 +14,7 @@ export interface DebugLog {
 
 class DebugLogger {
   private logs: DebugLog[] = [];
-  private maxLogs = 1000; // Keep last 1000 logs
+  private maxLogs = 10000; // Keep last 1000 logs
   private enabled = true;
 
   log(level: DebugLog['level'], category: string, message: string, data?: any) {

@@ -100,6 +100,59 @@ All servers support the `--version` flag:
 # Output: mlx_server version 1.0.0 (build date: 2025-10-14)
 ```
 
+## Server Configuration
+
+All servers support unified command-line arguments and environment variables for configuration.
+
+### Command-Line Arguments
+
+All servers support the following arguments:
+- `--host` - Host address to bind to (default: 127.0.0.1)
+- `--port`, `-p` - Port to listen on (default: 8000)
+- `--log-level` - Logging level: critical, error, warning, info, debug (default: info)
+- `--model` - Model to use
+- `--model-path` - Path to local model file (skips download)
+- `--version`, `-v` - Show version information
+- `--help`, `-h` - Show help message
+
+**Ollama servers** (Windows/Linux) also support:
+- `--model-id` - Hugging Face model ID to download
+- `--filename` - Model filename to download from Hugging Face
+
+### Environment Variables
+
+Configuration priority: **command-line args > environment variables > defaults**
+
+**Ollama/MLX Servers** (Windows/Linux/macOS):
+- `SERVER_HOST` - Host to listen on (default: 127.0.0.1)
+- `SERVER_PORT` - Port to listen on (default: 8000)
+- `SERVER_LOG_LEVEL` - Log level (default: info)
+- `SERVER_MODEL` - Model to use (default: mlx-community/Phi-3.5-mini-instruct-4bit)
+
+**Ollama servers** (Windows/Linux):
+- `SERVER_FILENAME` - Model filename
+- `SERVER_MODEL_PATH` - Path to local model file
+
+### Example Usage
+
+```bash
+# Using command-line arguments
+./ollama_server --host 0.0.0.0 --port 9000 --log-level debug
+
+# Using command-line arguments
+./mlx_server --host 0.0.0.0 --port 9000 --log-level debug
+
+# Using environment variables
+export SERVER_PORT=9000
+export SERVER_LOG_LEVEL=debug
+./ollama_server
+
+# Using environment variables (macOS)
+export SERVER_PORT=9000
+export SERVER_LOG_LEVEL=debug
+./mlx_server
+```
+
 ## Platform Notes
 
 ### Windows

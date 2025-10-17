@@ -43,8 +43,8 @@ pub struct ManagedLLMConfig {
     pub env_vars: HashMap<String, String>,
 }
 
-// Global state for the managed LLM server process
-type ManagedLLMState = Arc<Mutex<Option<Child>>>;
+// Global state for the managed LLM server process and its config
+type ManagedLLMState = Arc<Mutex<Option<(Child, ManagedLLMConfig)>>>;
 
 #[command]
 async fn read_directory(path: String, include_subdirectories: bool) -> Result<Vec<String>, String> {
@@ -381,7 +381,7 @@ async fn open_file(path: String) -> Result<(), String> {
 // Managed LLM Server Commands
 
 #[command]
-async fn get_llm_server_status(app: AppHandle) -> Result<ManagedLLMServerInfo, String> {
+async fn get_llm_server_status(app: AppHandle, state: State<'_, ManagedLLMState>) -> Result<ManagedLLMServerInfo, String> {
     let app_data_dir = app.path_resolver()
         .app_data_dir()
         .ok_or("Could not get app data directory")?;
@@ -438,10 +438,19 @@ async fn get_llm_server_status(app: AppHandle) -> Result<ManagedLLMServerInfo, S
         }
     };
 
-    // Check if process is running by trying to connect to the default port
-    let default_port = 8000;
+    // Get the host and port from the stored config, or use defaults
+    let (host, port) = {
+        let state_guard = state.lock().unwrap();
+        if let Some((_, config)) = state_guard.as_ref() {
+            (config.host.clone(), config.port)
+        } else {
+            ("127.0.0.1".to_string(), 8000)
+        }
+    };
+
+    // Check if process is running by trying to connect
     let client = reqwest::Client::new();
-    let test_url = format!("http://127.0.0.1:{}/v1/models", default_port);
+    let test_url = format!("http://{}:{}/v1/models", host, port);
     
     eprintln!("Testing server health at: {}", test_url);
     match client.get(&test_url).timeout(std::time::Duration::from_secs(5)).send().await {
@@ -456,7 +465,7 @@ async fn get_llm_server_status(app: AppHandle) -> Result<ManagedLLMServerInfo, S
                     status: "running".to_string(),
                     version: Some("1.0.0".to_string()), // TODO: Get actual version
                     path: Some(server_exe.to_string_lossy().to_string()),
-                    port: Some(default_port),
+                    port: Some(port),
                     error: None,
                 })
             } else {
@@ -465,7 +474,7 @@ async fn get_llm_server_status(app: AppHandle) -> Result<ManagedLLMServerInfo, S
                     status: "downloaded".to_string(),
                     version: Some("1.0.0".to_string()),
                     path: Some(server_exe.to_string_lossy().to_string()),
-                    port: Some(default_port),
+                    port: Some(port),
                     error: Some(format!("Server responded with status: {}", status_code)),
                 })
             }
@@ -476,7 +485,7 @@ async fn get_llm_server_status(app: AppHandle) -> Result<ManagedLLMServerInfo, S
                 status: "downloaded".to_string(),
                 version: Some("1.0.0".to_string()),
                 path: Some(server_exe.to_string_lossy().to_string()),
-                port: Some(default_port),
+                port: Some(port),
                 error: Some(format!("Connection failed: {}", e)),
             })
         }
@@ -642,40 +651,28 @@ async fn start_llm_server(
         return Err("Server binary not found. Please download it first.".to_string());
     }
 
-    // Set environment variables in the current process
-    std::env::set_var("OLLAMA_PORT", config.port.to_string());
-    std::env::set_var("OLLAMA_HOST", &config.host);
-    std::env::set_var("OLLAMA_LOG_LEVEL", &config.log_level);
+    let mut cmd = Command::new(&server_exe);
     
+    // Add command-line arguments (preferred method)
+    cmd.arg("--host").arg(&config.host);
+    cmd.arg("--port").arg(config.port.to_string());
+    cmd.arg("--log-level").arg(&config.log_level);
+    
+    // Add model arguments if specified
     if let Some(model) = &config.model {
-        std::env::set_var("OLLAMA_MODEL", model);
+        cmd.arg("--model").arg(model);
     }
     if let Some(model_path) = &config.model_path {
-        std::env::set_var("OLLAMA_MODEL_PATH", model_path);
+        cmd.arg("--model-path").arg(model_path);
     }
 
-    // Also prepare environment variables for the child process
-    let mut env_vars = config.env_vars.clone();
-    env_vars.insert("OLLAMA_PORT".to_string(), config.port.to_string());
-    env_vars.insert("OLLAMA_HOST".to_string(), config.host.clone());
-    env_vars.insert("OLLAMA_LOG_LEVEL".to_string(), config.log_level.clone());
-    
-    if let Some(model) = &config.model {
-        env_vars.insert("OLLAMA_MODEL".to_string(), model.clone());
-    }
-    if let Some(model_path) = &config.model_path {
-        env_vars.insert("OLLAMA_MODEL_PATH".to_string(), model_path.clone());
-    }
 
     // Start the server process
     eprintln!("Starting server with command: {:?}", server_exe);
-    eprintln!("Environment variables: {:?}", env_vars);
+    eprintln!("Command-line arguments: --host {} --port {} --log-level {}", 
+              config.host, config.port, config.log_level);
     
-    // Try using inherit for stderr to see errors in real-time
-    let mut cmd = Command::new(&server_exe);
-    cmd.envs(&env_vars)
-        .stdout(Stdio::null())  // Ignore stdout
-        .stderr(Stdio::inherit()); // Show stderr in terminal
+    cmd.stdout(Stdio::null()).stderr(Stdio::inherit()); // Show stderr in terminal
 
     let mut child = cmd.spawn()
         .map_err(|e| format!("Failed to start server: {}", e))?;
@@ -698,11 +695,11 @@ async fn start_llm_server(
         }
     }
 
-    // Store the process handle
+    // Store the process handle and config
     let pid = child.id();
     {
         let mut state_guard = state.lock().unwrap();
-        *state_guard = Some(child);
+        *state_guard = Some((child, config.clone()));
         eprintln!("Stored server process with PID {} in state", pid);
     }
 
@@ -740,7 +737,7 @@ async fn stop_llm_server(state: State<'_, ManagedLLMState>) -> Result<String, St
     let has_child = state_guard.is_some();
     eprintln!("State has child process: {}", has_child);
     
-    if let Some(mut child) = state_guard.take() {
+    if let Some((mut child, _config)) = state_guard.take() {
         let pid = child.id();
         eprintln!("Found server process with PID: {}", pid);
         
@@ -773,8 +770,8 @@ async fn stop_llm_server(state: State<'_, ManagedLLMState>) -> Result<String, St
 }
 
 #[command]
-async fn get_llm_server_info(app: AppHandle) -> Result<ManagedLLMServerInfo, String> {
-    get_llm_server_status(app).await
+async fn get_llm_server_info(app: AppHandle, state: State<'_, ManagedLLMState>) -> Result<ManagedLLMServerInfo, String> {
+    get_llm_server_status(app, state).await
 }
 
 fn create_menu() -> Menu {
@@ -845,7 +842,7 @@ fn main() {
     let menu = create_menu();
     
     // Create the managed state for the LLM server
-    let llm_state = Arc::new(Mutex::new(None::<Child>)) as ManagedLLMState;
+    let llm_state = Arc::new(Mutex::new(None::<(Child, ManagedLLMConfig)>)) as ManagedLLMState;
     
     tauri::Builder::default()
         .menu(menu)
@@ -857,7 +854,7 @@ fn main() {
                 
                 // Stop the LLM server
                 let mut state_guard = llm_state.lock().unwrap();
-                if let Some(mut child) = state_guard.take() {
+                if let Some((mut child, _config)) = state_guard.take() {
                     let pid = child.id();
                     eprintln!("Stopping LLM server with PID: {}", pid);
                     

@@ -24,7 +24,7 @@ export default function HelpDialog({ isOpen, onClose }: HelpDialogProps) {
       setTimeout(() => setExportStatus(''), 5000);
     } catch (error) {
       setExportStatus(`❌ Failed to save: ${error}`);
-      console.error('Failed to export diagnostics:', error);
+      debugLogger.error('HELP_DIALOG', 'Failed to export diagnostics', { error });
       
       // Clear error message after 5 seconds
       setTimeout(() => setExportStatus(''), 5000);

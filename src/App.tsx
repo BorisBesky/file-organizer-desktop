@@ -4,6 +4,7 @@ import { invoke } from '@tauri-apps/api/tauri';
 import { listen } from '@tauri-apps/api/event';
 import { ScanState, ManagedLLMConfig } from './types';
 import { LLMConfigPanel, HelpDialog, AboutDialog } from './components';
+import { debugLogger } from './debug-logger';
 
 function sanitizeFilename(name: string) {
   let out = name.trim().replace(/[\n\r]/g, ' ');
@@ -56,7 +57,7 @@ export default function App() {
         return parsed;
       }
     } catch (error) {
-      console.error('Failed to load LLM config from localStorage:', error);
+      debugLogger.error('APP_INIT', 'Failed to load LLM config from localStorage', { error });
     }
     // Return default config if no saved config exists
     return {
@@ -77,7 +78,7 @@ export default function App() {
         return JSON.parse(saved);
       }
     } catch (error) {
-      console.error('Failed to load provider configs from localStorage:', error);
+      debugLogger.error('APP_INIT', 'Failed to load provider configs from localStorage', { error });
     }
     return {};
   };
@@ -106,7 +107,7 @@ export default function App() {
         return migratedConfig;
       }
     } catch (error) {
-      console.error('Failed to load managed LLM config from localStorage:', error);
+      debugLogger.error('APP_INIT', 'Failed to load managed LLM config from localStorage', { error });
     }
     return {
       port: 8000,
@@ -219,7 +220,7 @@ export default function App() {
     try {
       localStorage.setItem('llmConfig', JSON.stringify(llmConfig));
     } catch (error) {
-      console.error('Failed to save LLM config to localStorage:', error);
+      debugLogger.error('APP_CONFIG', 'Failed to save LLM config to localStorage', { error });
     }
 
     setProviderConfigs(prev => {
@@ -232,7 +233,7 @@ export default function App() {
       try {
         localStorage.setItem('llmProviderConfigs', JSON.stringify(updated));
       } catch (error) {
-        console.error('Failed to save provider configs to localStorage:', error);
+        debugLogger.error('APP_CONFIG', 'Failed to save provider configs to localStorage', { error });
       }
       return updated;
     });
@@ -243,7 +244,7 @@ export default function App() {
     try {
       localStorage.setItem('managedLLMConfig', JSON.stringify(managedLLMConfig));
     } catch (error) {
-      console.error('Failed to save managed LLM config to localStorage:', error);
+      debugLogger.error('APP_CONFIG', 'Failed to save managed LLM config to localStorage', { error });
     }
   }, [managedLLMConfig]);
 
@@ -255,7 +256,7 @@ export default function App() {
         const config = JSON.parse(saved);
         // Check if we need to migrate (has old field names)
         if (config.logLevel || config.modelPath || config.envVars) {
-          console.log('Migrating managed LLM config from old format...');
+          debugLogger.info('APP_CONFIG', 'Migrating managed LLM config from old format', {});
           const migratedConfig: ManagedLLMConfig = {
             port: config.port || 8000,
             host: config.host || '127.0.0.1',
@@ -270,7 +271,7 @@ export default function App() {
         }
       }
     } catch (error) {
-      console.error('Failed to migrate managed LLM config:', error);
+      debugLogger.error('APP_CONFIG', 'Failed to migrate managed LLM config', { error });
     }
   }, []); // Run only once on mount
 
@@ -290,7 +291,7 @@ export default function App() {
     if (llmConfig.provider === 'managed-local') {
       // Check if we've already attempted to start the server
       if (serverStartAttempted.current) {
-        console.log('Server start already attempted, skipping duplicate attempt');
+        debugLogger.debug('MANAGED_LLM', 'Server start already attempted, skipping duplicate attempt', {});
         return;
       }
       
@@ -303,18 +304,18 @@ export default function App() {
           const { getManagedLLMServerStatus, startManagedLLMServer } = await import('./api');
           const status = await getManagedLLMServerStatus();
           
-          console.log('Managed LLM server status:', status.status);
+          debugLogger.info('MANAGED_LLM', 'Managed LLM server status', { status: status.status });
           
           if (status.status === 'stopped' || status.status === 'downloaded') {
             // Auto-start the server
-            console.log('Starting managed LLM server with config:', managedLLMConfig);
+            debugLogger.info('MANAGED_LLM', 'Starting managed LLM server with config', { config: managedLLMConfig });
             await startManagedLLMServer(managedLLMConfig);
             setEvents((prev: string[]) => ['Auto-started managed LLM server', ...prev]);
           } else {
-            console.log('Server already running or starting, skipping auto-start');
+            debugLogger.debug('MANAGED_LLM', 'Server already running or starting, skipping auto-start', {});
           }
         } catch (error: any) {
-          console.error('Failed to auto-start managed LLM server:', error);
+          debugLogger.error('MANAGED_LLM', 'Failed to auto-start managed LLM server', { error });
           setEvents((prev: string[]) => [`Failed to auto-start server: ${error.message}`, ...prev]);
           // Reset the flag on error so the user can try again
           serverStartAttempted.current = false;

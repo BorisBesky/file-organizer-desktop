@@ -4,8 +4,8 @@
 cd "$(dirname "$0")"
 
 # Allow host/port override via env
-HOST=${MLX_SERVER_HOST:-127.0.0.1}
-PORT=${MLX_SERVER_PORT:-8080}
+HOST=${SERVER_HOST:-127.0.0.1}
+PORT=${SERVER_PORT:-8000}
 
 # Kill any existing instances
 pkill -9 mlx_server 2>/dev/null

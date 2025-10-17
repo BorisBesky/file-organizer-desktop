@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { LLMConfig, LLMProviderType, DEFAULT_CONFIGS, listOllamaModels, listLMStudioModels, getManagedLLMServerStatus, startManagedLLMServer, stopManagedLLMServer, getManagedLLMServerInfo } from '../api';
 import { ManagedLLMServerInfo, ManagedLLMConfig } from '../types';
 import ManagedLLMDialog from './ManagedLLMDialog';
+import { debugLogger } from '../debug-logger';
 
 interface LLMConfigPanelProps {
   config: LLMConfig;
@@ -100,11 +101,11 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled, pro
       setManagedLLMStatus(status);
       
       // Show download dialog if not downloaded
-      if (status.status === 'not_downloaded') {
-        setShowDownloadDialog(true);
-      }
+      // if (status.status === 'not_downloaded') {
+      //   setShowDownloadDialog(true);
+      // }
     } catch (error) {
-      console.error('Failed to load managed LLM status:', error);
+      debugLogger.error('MANAGED_LLM', 'Failed to load managed LLM status', { error });
     }
   }, []);
 
@@ -121,7 +122,7 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled, pro
       // Cleanup: stop polling when provider changes, panel collapses, or component unmounts
       return () => {
         clearInterval(intervalId);
-        console.log('Stopped managed LLM status polling');
+        debugLogger.debug('MANAGED_LLM', 'Stopped managed LLM status polling', {});
       };
     }
   }, [config.provider, isExpanded, loadManagedLLMStatus]);
@@ -139,7 +140,7 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled, pro
       await startManagedLLMServer(currentManagedConfig);
       await loadManagedLLMStatus();
     } catch (error: any) {
-      console.error('Failed to start server:', error);
+      debugLogger.error('MANAGED_LLM', 'Failed to start server', { error });
       setTestMessage(`Failed to start server: ${error.message}`);
     }
   };
@@ -149,7 +150,7 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled, pro
       await stopManagedLLMServer();
       await loadManagedLLMStatus();
     } catch (error: any) {
-      console.error('Failed to stop server:', error);
+      debugLogger.error('MANAGED_LLM', 'Failed to stop server', { error });
       setTestMessage(`Failed to stop server: ${error.message}`);
     }
   };
@@ -294,81 +295,85 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled, pro
           </div>
 
           {/* Configuration Fields */}
-          <div className="config-section">
-            <label className="config-label">
-              Base URL
-              <input
-                type="text"
-                className="config-input"
-                value={config.baseUrl}
-                onChange={(e) => onChange({ ...config, baseUrl: e.target.value })}
-                placeholder="e.g., http://localhost:1234"
-                disabled={disabled}
-              />
-            </label>
-          </div>
-
-          <div className="config-section">
-            <label className="config-label">
-              Model
-              {config.provider === 'ollama' || config.provider === 'lmstudio' ? (
-                <>
-                  <select
-                    className="config-input"
-                    value={config.model}
-                    onChange={(e) => onChange({ ...config, model: e.target.value })}
-                    disabled={disabled || modelsLoading}
-                  >
-                    <option value="">Select a model{modelsLoading ? ' (loading...)' : ''}</option>
-                    {availableModels.map((m) => (
-                      <option key={m} value={m}>{m}</option>
-                    ))}
-                  </select>
-                  {modelsError && <div className="config-hint model-error">{modelsError}</div>}
-                </>
-              ) : (
+          {config.provider !== 'managed-local' && (
+            <>
+            <div className="config-section">
+              <label className="config-label">
+                Base URL
                 <input
                   type="text"
                   className="config-input"
-                  value={config.model}
-                  onChange={(e) => onChange({ ...config, model: e.target.value })}
-                  placeholder="e.g., gpt-4-turbo-preview"
-                  disabled={disabled}
-                />
-              )}
-            </label>
-            <div className="config-hint">
-              {config.provider === 'openai' && 'Examples: gpt-4-turbo-preview, gpt-3.5-turbo'}
-              {config.provider === 'anthropic' && 'Examples: claude-3-5-sonnet-20241022, claude-3-opus-20240229'}
-              {config.provider === 'ollama' && 'Examples: llama2, mistral, codellama'}
-              {config.provider === 'groq' && 'Examples: llama-3.1-70b-versatile, mixtral-8x7b-32768'}
-              {config.provider === 'gemini' && 'Examples: gemini-2.0-flash-exp, gemini-1.5-pro, gemini-1.5-flash'}
-              {config.provider === 'lmstudio' && 'Use the model name from your LM Studio server'}
-            </div>
-          </div>
-
-          {currentProviderInfo.requiresApiKey && (
-            <div className="config-section">
-              <label className="config-label">
-                API Key
-                <input
-                  type="password"
-                  className="config-input"
-                  value={config.apiKey || ''}
-                  onChange={(e) => onChange({ ...config, apiKey: e.target.value })}
-                  placeholder="Enter your API key"
+                  value={config.baseUrl}
+                  onChange={(e) => onChange({ ...config, baseUrl: e.target.value })}
+                  placeholder="e.g., http://localhost:1234"
                   disabled={disabled}
                 />
               </label>
+            </div>
+
+            <div className="config-section">
+              <label className="config-label">
+                Model
+                {config.provider === 'ollama' || config.provider === 'lmstudio' ? (
+                  <>
+                    <select
+                      className="config-input"
+                      value={config.model}
+                      onChange={(e) => onChange({ ...config, model: e.target.value })}
+                      disabled={disabled || modelsLoading}
+                    >
+                      <option value="">Select a model{modelsLoading ? ' (loading...)' : ''}</option>
+                      {availableModels.map((m) => (
+                        <option key={m} value={m}>{m}</option>
+                      ))}
+                    </select>
+                    {modelsError && <div className="config-hint model-error">{modelsError}</div>}
+                  </>
+                ) : (
+                  <input
+                    type="text"
+                    className="config-input"
+                    value={config.model}
+                    onChange={(e) => onChange({ ...config, model: e.target.value })}
+                    placeholder="e.g., gpt-4-turbo-preview"
+                    disabled={disabled}
+                  />
+                )}
+              </label>
               <div className="config-hint">
-                {config.provider === 'openai' && 'Get your API key from platform.openai.com'}
-                {config.provider === 'anthropic' && 'Get your API key from console.anthropic.com'}
-                {config.provider === 'groq' && 'Get your API key from console.groq.com'}
-                {config.provider === 'gemini' && 'Get your API key from ai.google.dev'}
+                {config.provider === 'openai' && 'Examples: gpt-4-turbo-preview, gpt-3.5-turbo'}
+                {config.provider === 'anthropic' && 'Examples: claude-3-5-sonnet-20241022, claude-3-opus-20240229'}
+                {config.provider === 'ollama' && 'Examples: llama2, mistral, codellama'}
+                {config.provider === 'groq' && 'Examples: llama-3.1-70b-versatile, mixtral-8x7b-32768'}
+                {config.provider === 'gemini' && 'Examples: gemini-2.0-flash-exp, gemini-1.5-pro, gemini-1.5-flash'}
+                {config.provider === 'lmstudio' && 'Use the model name from your LM Studio server'}
               </div>
             </div>
-          )}
 
+            {currentProviderInfo.requiresApiKey && (
+              <div className="config-section">
+                <label className="config-label">
+                  API Key
+                  <input
+                    type="password"
+                    className="config-input"
+                    value={config.apiKey || ''}
+                    onChange={(e) => onChange({ ...config, apiKey: e.target.value })}
+                    placeholder="Enter your API key"
+                    disabled={disabled}
+                  />
+                </label>
+                <div className="config-hint">
+                  {config.provider === 'openai' && 'Get your API key from platform.openai.com'}
+                  {config.provider === 'anthropic' && 'Get your API key from console.anthropic.com'}
+                  {config.provider === 'groq' && 'Get your API key from console.groq.com'}
+                  {config.provider === 'gemini' && 'Get your API key from ai.google.dev'}
+                </div>
+              </div>
+            )}
+            </>
+          )}
+          
           {/* Advanced Settings */}
           <div className="config-section">
             <button
@@ -553,7 +558,9 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled, pro
                         type="number"
                         className="config-input"
                         value={currentManagedConfig.port}
-                        onChange={(e) => updateManagedConfig({ port: parseInt(e.target.value) || 8000 })}
+                        onChange={(e) => {updateManagedConfig({ port: parseInt(e.target.value) || 8000 });
+                          onChange({ ...config, baseUrl: "http://" + currentManagedConfig.host + ":" + (parseInt(e.target.value) || 8000) });
+                        }}
                         disabled={disabled}
                       />
                     </label>
@@ -566,7 +573,9 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled, pro
                         type="text"
                         className="config-input"
                         value={currentManagedConfig.host}
-                        onChange={(e) => updateManagedConfig({ host: e.target.value })}
+                        onChange={(e) => {updateManagedConfig({ host: e.target.value });
+                          onChange({ ...config, baseUrl: "http://" + e.target.value + ":" + currentManagedConfig.port });
+                        }}
                         disabled={disabled}
                       />
                     </label>
@@ -579,7 +588,9 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled, pro
                         type="text"
                         className="config-input"
                         value={currentManagedConfig.model || ''}
-                        onChange={(e) => updateManagedConfig({ model: e.target.value || undefined })}
+                        onChange={(e) => {updateManagedConfig({ model: e.target.value || undefined });
+                          onChange({ ...config, model: e.target.value || '' });
+                        }}
                         placeholder="e.g., MaziyarPanahi/gemma-3-1b-it-GGUF"
                         disabled={disabled}
                       />
@@ -623,53 +634,6 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled, pro
                     </label>
                   </div>
 
-                  {/* Environment Variables */}
-                  <div className="config-section">
-                    <label className="config-label">
-                      Environment Variables
-                      <div className="env-vars-editor">
-                        {envVars.map((envVar, index) => (
-                          <div key={index} className="env-var-row">
-                            <input
-                              type="text"
-                              className="config-input env-key"
-                              value={envVar.key}
-                              onChange={(e) => updateEnvVar(index, 'key', e.target.value)}
-                              placeholder="Variable name"
-                              disabled={disabled}
-                            />
-                            <input
-                              type="text"
-                              className="config-input env-value"
-                              value={envVar.value}
-                              onChange={(e) => updateEnvVar(index, 'value', e.target.value)}
-                              placeholder="Value"
-                              disabled={disabled}
-                            />
-                            <button
-                              type="button"
-                              className="remove-env-var"
-                              onClick={() => removeEnvVar(index)}
-                              disabled={disabled}
-                            >
-                              ×
-                            </button>
-                          </div>
-                        ))}
-                        <button
-                          type="button"
-                          className="add-env-var"
-                          onClick={addEnvVar}
-                          disabled={disabled}
-                        >
-                          + Add Environment Variable
-                        </button>
-                      </div>
-                    </label>
-                    <div className="config-hint">
-                      Common variables: OLLAMA_MODEL, OLLAMA_FILENAME, OLLAMA_MODEL_PATH, OLLAMA_PORT, OLLAMA_HOST, OLLAMA_LOG_LEVEL
-                    </div>
-                  </div>
                 </div>
               )}
             </>

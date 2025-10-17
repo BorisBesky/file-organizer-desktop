@@ -73,7 +73,7 @@ export default function ManagedLLMDialog({ isOpen, onClose, onDownloadComplete }
           
           <div className="download-info">
             <div className="info-row">
-              <strong>Platform:</strong> {navigator.platform}
+              <strong>Platform:</strong> {navigator.userAgent.includes('Win') ? 'Windows' : navigator.userAgent.includes('Mac') ? 'macOS' : 'Linux'}
             </div>
             <div className="info-row">
               <strong>Version:</strong> 
