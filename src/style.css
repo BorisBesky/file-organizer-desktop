@@ -537,7 +537,8 @@ td input[type="checkbox"] {
   border-radius: 6px;
   margin-top: 12px;
   background: var(--bg-primary);
-  max-height: 500px;
+  flex: 1;
+  min-height: 0;
   position: relative;
 }
 
