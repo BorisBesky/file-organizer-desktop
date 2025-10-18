@@ -902,7 +902,7 @@ export default function App() {
               onClick={toggleSidebarCollapse}
               title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
             >
-              {sidebarCollapsed ? '▶' : '◀'}
+              ☰
             </button>
             <button className="theme-toggle" onClick={toggleTheme} title={`Switch to ${theme === 'light' ? 'Dark' : 'Light'} Mode`}>
               {theme === 'light' ? '☀️' : '🌙'}

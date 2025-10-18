@@ -942,11 +942,23 @@ label input[type="checkbox"] {
   box-sizing: border-box;
 }
 
+select.config-input {
+  background-color: var(--bg-input);
+  color: var(--text-primary);
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+select.config-input option {
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
 .config-input:focus,
 .config-textarea:focus {
   outline: none;
   border-color: var(--accent-blue);
-  box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.1);
+  box-shadow: 0 0 0 3px #007aff1a;
 }
 
 .config-textarea.input-error {
