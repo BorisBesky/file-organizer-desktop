@@ -56,8 +56,9 @@ jobs:
           fi
 
           # Normalize platforms input (lowercase, remove spaces)
-          platforms="${PLATFORMS,,}"
-          platforms="${platforms// /}"
+          platforms=$(printf '%s' "$PLATFORMS" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')
+          echo "platforms=$platforms"
+          
 
           # If input includes 'all', run
           if echo "${platforms}" | grep -q "all" ; then
