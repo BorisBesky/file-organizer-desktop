@@ -15,12 +15,19 @@ on:
       releaseName:
         description: 'Name of the release'
         required: true
+      platforms:
+        description: 'Platforms to build (comma-separated: windows,linux,macos or "all")'
+        required: true
+        default: 'all'
 
 env:
   GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 jobs:
   publish-tauri:
+    # A per-step check will determine whether this matrix job should run when
+    # triggered manually. We can't reference `matrix` inside a job-level `if`,
+    # so we set an output `run` from the first step and gate the remaining steps.
     strategy:
       fail-fast: false
       matrix:
@@ -34,31 +41,82 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Determine if this platform should run
+        id: check
+        shell: bash
+        env:
+          PLATFORMS: ${{ github.event.inputs.platforms }}
+          CURRENT_PLATFORM: ${{ matrix.platform }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+        run: |
+          # For tag pushes we always run the matrix job
+          if [ "${GITHUB_EVENT_NAME}" = "push" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Normalize platforms input (lowercase, remove spaces)
+          platforms="${PLATFORMS,,}"
+          platforms="${platforms// /}"
+
+          # If input includes 'all', run
+          if echo "${platforms}" | grep -q "all" ; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Map matrix.platform to our platform labels
+          case "${CURRENT_PLATFORM}" in
+            macos-latest) want="macos" ;; 
+            ubuntu-22.04) want="linux" ;; 
+            windows-latest) want="windows" ;; 
+            *) want="" ;;
+          esac
+
+          # Check if the requested platforms list contains the desired platform
+          found=false
+          IFS=','; for p in ${platforms}; do
+            if [ "$p" = "$want" ]; then
+              found=true
+              break
+            fi
+          done
+
+          if [ "$found" = true ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Setup Node.js
+        if: ${{ steps.check.outputs.run == 'true' }}
         uses: actions/setup-node@v4
         with:
           node-version: lts/*
 
       - name: Install Rust toolchain
-        if: matrix.platform == 'macos-latest'
+        if: ${{ steps.check.outputs.run == 'true' && matrix.platform == 'macos-latest' }}
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
           targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin, x86_64-apple-darwin' || '' }}
 
       - name: rust cache
+        if: ${{ steps.check.outputs.run == 'true' }}
         uses: swatinem/rust-cache@v2
         with:
           key: ${{ runner.os }}-tauri-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Install dependencies (npm)
+        if: ${{ steps.check.outputs.run == 'true' }}
         run: npm install
 
       - name: Install linux dependencies (optional)
-        if: matrix.platform == 'ubuntu-22.04'
+        if: ${{ steps.check.outputs.run == 'true' && matrix.platform == 'ubuntu-22.04' }}
         run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.0-dev libappindicator3-dev
 
       - name: Build and Publish with Tauri Action
+        if: ${{ steps.check.outputs.run == 'true' }}
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
