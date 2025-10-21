@@ -59,7 +59,6 @@ jobs:
           platforms=$(printf '%s' "$PLATFORMS" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')
           echo "platforms=$platforms"
           
-
           # If input includes 'all', run
           if echo "${platforms}" | grep -q "all" ; then
             echo "run=true" >> "$GITHUB_OUTPUT"
@@ -106,7 +105,7 @@ jobs:
         if: ${{ steps.check.outputs.run == 'true' }}
         uses: swatinem/rust-cache@v2
         with:
-          key: ${{ runner.os }}-tauri-${{ hashFiles('**/Cargo.lock') }}
+          workspaces: './src-tauri -> target'
 
       - name: Install dependencies (npm)
         if: ${{ steps.check.outputs.run == 'true' }}
@@ -116,6 +115,55 @@ jobs:
         if: ${{ steps.check.outputs.run == 'true' && matrix.platform == 'ubuntu-22.04' }}
         run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.0-dev libappindicator3-dev
 
+      # ----- Prepare macOS signing keychain & capture identity -----
+      - name: Prepare macOS signing keychain
+        if: ${{ steps.check.outputs.run == 'true' && matrix.platform == 'macos-latest' }}
+        shell: bash
+        env:
+          APPLE_CERT_BASE64: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: tauri-build
+        run: |
+          set -euo pipefail
+          mkdir -p build-logs
+
+          KEYCHAIN_PATH="$HOME/Library/Keychains/tauri-build.keychain-db"
+          CERT_P12_TMP="$(mktemp -t tauri-cert-XXXX).p12"
+
+          # Decode cert to a temp file
+          echo "$APPLE_CERT_BASE64" | base64 --decode > "$CERT_P12_TMP"
+          ls -l "$CERT_P12_TMP"
+
+          # Create and unlock keychain at full predictable path
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -t 3600 -u "$KEYCHAIN_PATH"
+
+          # Import the p12 and allow codesign/pkgbuild/productbuild to access it
+          security import "$CERT_P12_TMP" -k "$KEYCHAIN_PATH" -P "$APPLE_CERT_PASSWORD" \
+            -T /usr/bin/codesign -T /usr/bin/pkgbuild -T /usr/bin/productbuild
+
+          # Ensure keychain is in the user's keychain list (use login + our keychain)
+          security list-keychains -d user -s "$HOME/Library/Keychains/login.keychain-db" "$KEYCHAIN_PATH" \
+            | tee build-logs/security-list-keychains.log
+
+          # Ensure codesign can access the private key (partition list)
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH" \
+            2>&1
+
+          # Print identities for debugging
+          security find-identity -v -p codesigning | tee build-logs/security-find-identity.log
+
+          # Extract the first identity CN and export it for subsequent steps (tauri action will use this from env)
+          APPLE_SIGNING_IDENTITY=$(security find-identity -v -p codesigning | awk -F\" 'NR==1{print $2}')
+          echo "APPLE_SIGNING_IDENTITY=$APPLE_SIGNING_IDENTITY" >> "$GITHUB_ENV"
+          echo "Chosen identity: $APPLE_SIGNING_IDENTITY" | tee build-logs/identity-chosen.log
+
+          # Create symlink to satisfy callers that pass a short keychain name
+          ln -sf "$KEYCHAIN_PATH" tauri-build.keychain
+          ls -l tauri-build.keychain >> build-logs/ln-symlink.log
+
+      # ----- Build and Publish with Tauri Action -----
       - name: Build and Publish with Tauri Action
         if: ${{ steps.check.outputs.run == 'true' }}
         uses: tauri-apps/tauri-action@v0
@@ -123,12 +171,18 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ env.APPLE_SIGNING_IDENTITY }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         with:
           tagName: app-v__VERSION__ # the action automatically replaces \_\_VERSION\_\_ with the app version.
           releaseName: 'File Organizer v__VERSION__'
           args: >-
             ${{ runner.os == 'macOS' && '--target universal-apple-darwin' || '' }}
+
+      # ----- Upload logs for debugging (macOS only) -----
+      # - name: Upload tauri macOS debug logs
+      #   if: ${{ steps.check.outputs.run == 'true' && matrix.platform == 'macos-latest' }}
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: tauri-macos-debug-logs
+      #     path: build-logs/
