@@ -101,11 +101,38 @@ jobs:
           toolchain: stable
           targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin, x86_64-apple-darwin' || '' }}
 
-      - name: rust cache
+      - name: Cache cargo registry & git
         if: ${{ steps.check.outputs.run == 'true' }}
-        uses: swatinem/rust-cache@v2
+        uses: actions/cache@v4
         with:
-          workspaces: './src-tauri -> target'
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: v0-rust-cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            v0-rust-cargo-${{ runner.os }}-
+
+      - name: Cache cargo target (universal)
+        if: ${{ steps.check.outputs.run == 'true' && matrix.platform == 'macos-latest' }}
+        uses: actions/cache@v4
+        with:
+          path: |
+            src-tauri/target/aarch64-apple-darwin
+            src-tauri/target/x86_64-apple-darwin
+            src-tauri/target/universal-apple-darwin
+          key: v0-rust-target-universal-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            v0-rust-target-universal-
+
+      - name: Cache cargo target (non-macOS)
+        if: ${{ steps.check.outputs.run == 'true' && matrix.platform != 'macos-latest' }}
+        uses: actions/cache@v4
+        with:
+          path: |
+            src-tauri/target
+          key: v0-rust-target-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            v0-rust-target-${{ runner.os }}-
 
       - name: Install dependencies (npm)
         if: ${{ steps.check.outputs.run == 'true' }}
