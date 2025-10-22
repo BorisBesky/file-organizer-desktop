@@ -182,6 +182,7 @@ jobs:
       #       ${{ runner.os == 'macOS' && '--target universal-apple-darwin' || '' }}
 
       - name: Build Tauri App (verbose + capture logs)
+        if: ${{ steps.check.outputs.run == 'true' && matrix.platform == 'macos-latest' }}
         env:
           RUST_BACKTRACE: 1
           RUST_LOG: debug
