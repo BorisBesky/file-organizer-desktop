@@ -106,6 +106,8 @@ jobs:
         uses: swatinem/rust-cache@v2
         with:
           workspaces: './src-tauri -> target'
+          shared-key: ${{ matrix.platform == 'macos-latest' && 'universal-macos' || '' }}
+          cache-all-crates: true
 
       - name: Install dependencies (npm)
         if: ${{ steps.check.outputs.run == 'true' }}
@@ -173,11 +175,14 @@ jobs:
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ env.APPLE_SIGNING_IDENTITY }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
         with:
           tagName: app-v__VERSION__ # the action automatically replaces \_\_VERSION\_\_ with the app version.
           releaseName: 'File Organizer v__VERSION__'
           args: >-
             ${{ runner.os == 'macOS' && '--target universal-apple-darwin' || '' }}
+        continue-on-error: true
 
       # ----- Upload logs for debugging (macOS only) -----
       # - name: Upload tauri macOS debug logs
