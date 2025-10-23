@@ -384,13 +384,37 @@ export async function classifyViaLLM(opts: {
   }
   
   const promptTemplate =
-    `You are a file organizer. Given the ${fileContent?.image_base64 ? 'image' : 'text content'} of a file, 
-    1) classify it into a category path with up to 2 levels of subcategories. 
-    Do not use more than 2 levels of subcategories. Separate each level with a forward slash (/). 
-    2) suggest a concise filename base (no extension) that includes provider/company and date if present. 
-    ${fileContent?.image_base64 ? '\n\nAnalyze the image and describe what you see to determine the appropriate category and filename.' : ''}
-    
-    Reply in strict JSON with keys: category_path, suggested_filename, confidence (0-1).`;
+ `You are a file organizer. Analyze the ${fileContent?.image_base64 ? 'image' : 'text content'} and provide classification and naming suggestions.
+
+  **Task 1: Category Classification**
+  - Create a category path with EXACTLY 2 levels separated by forward slash (/)
+  - Use Title Case for all category levels (e.g., "Personal/Medical Records")
+  - First level should be ONE of these broad categories:
+    Business, Personal, Finance, Health, Education, Entertainment, Work, Travel, Legal, Technology, Science, Art, Music, Sports, Media, Documents, Archives
+  - Second level should be a specific subcategory relevant to content:
+    Examples: Invoices, Reports, Photos, Recipes, Projects, Research, Contracts, Receipts, Presentations, Notes
+  - If content doesn't fit clearly, use "Uncategorized/General"
+  - Never create categories deeper than 2 levels
+
+  **Task 2: Filename Suggestion**
+  - Provide a descriptive filename base (no file extension) using lowercase with underscores
+  - Format: {primary_topic}_{entity}_{date_or_identifier}
+    - primary_topic: main subject (1-2 words, e.g., "invoice", "meeting_notes", "project_proposal")
+    - entity: company/person/organization if identifiable (e.g., "acme_corp", "john_smith")
+    - date_or_identifier: date in YYYY-MM-DD or unique identifier if present
+  - If any component is missing, omit it (minimum: just primary_topic)
+  - Examples: "invoice_acme_corp_2024-03-15", "recipe_chocolate_cake", "contract_freelance_2024"
+  - Keep total length under 50 characters
+  ${fileContent?.image_base64 ? '\n**For images**: Describe visible content, text, objects, or documents to determine category and filename.' : ''}
+
+  **Output Format**: Return ONLY valid JSON with these exact keys:
+  {
+    "category_path": "Category/Subcategory",
+    "suggested_filename": "descriptive_name_here",
+    "confidence": 0.85
+  }
+
+  Original filename: ${originalName}`;
 
   const hint = categoriesHint?.length ? `\n\nExisting categories (prefer one of these if it matches the content of the file):\n- ${categoriesHint.join('\n- ')}` : '';
   const maxTextLength = config.maxTextLength || 4096;

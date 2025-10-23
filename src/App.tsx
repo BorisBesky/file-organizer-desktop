@@ -85,6 +85,7 @@ export default function App() {
 
   const [llmConfig, setLlmConfig] = useState<LLMConfig>(loadLlmConfig());
   const [providerConfigs, setProviderConfigs] = useState<Record<string, LLMConfig>>(loadProviderConfigs());
+  const defaultModel = (navigator.userAgent.includes('Mac') ? 'mlx-community/Phi-3.5-mini-instruct-4bit' : 'MaziyarPanahi/gemma-3-1b-it-GGUF');
   
   // Track if we've already attempted to start the server to prevent duplicates
   const serverStartAttempted = useRef(false);
@@ -99,7 +100,7 @@ export default function App() {
         const migratedConfig: ManagedLLMConfig = {
           port: config.port || 8000,
           host: config.host || '127.0.0.1',
-          model: config.model || 'MaziyarPanahi/gemma-3-1b-it-GGUF',
+          model: config.model || defaultModel,
           log_level: config.log_level || config.logLevel || 'info', // Support both old and new field names
           model_path: config.model_path || config.modelPath,
           env_vars: config.env_vars || config.envVars || {}
@@ -112,7 +113,7 @@ export default function App() {
     return {
       port: 8000,
       host: '127.0.0.1',
-      model: 'MaziyarPanahi/gemma-3-1b-it-GGUF',
+      model: defaultModel,
       log_level: 'info',
       env_vars: {}
     };
@@ -260,7 +261,7 @@ export default function App() {
           const migratedConfig: ManagedLLMConfig = {
             port: config.port || 8000,
             host: config.host || '127.0.0.1',
-            model: config.model || 'MaziyarPanahi/gemma-3-1b-it-GGUF',
+            model: config.model ||  defaultModel,
             log_level: config.log_level || config.logLevel || 'info',
             model_path: config.model_path || config.modelPath,
             env_vars: config.env_vars || config.envVars || {}
