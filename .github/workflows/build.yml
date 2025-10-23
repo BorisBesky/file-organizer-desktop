@@ -101,38 +101,13 @@ jobs:
           toolchain: stable
           targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin, x86_64-apple-darwin' || '' }}
 
-      - name: Cache cargo registry & git
+      - name: rust cache
         if: ${{ steps.check.outputs.run == 'true' }}
-        uses: actions/cache@v4
+        uses: swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-          key: v0-rust-cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            v0-rust-cargo-${{ runner.os }}-
-
-      - name: Cache cargo target (universal)
-        if: ${{ steps.check.outputs.run == 'true' && matrix.platform == 'macos-latest' }}
-        uses: actions/cache@v4
-        with:
-          path: |
-            src-tauri/target/aarch64-apple-darwin
-            src-tauri/target/x86_64-apple-darwin
-            src-tauri/target/universal-apple-darwin
-          key: v0-rust-target-universal-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            v0-rust-target-universal-
-
-      - name: Cache cargo target (non-macOS)
-        if: ${{ steps.check.outputs.run == 'true' && matrix.platform != 'macos-latest' }}
-        uses: actions/cache@v4
-        with:
-          path: |
-            src-tauri/target
-          key: v0-rust-target-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            v0-rust-target-${{ runner.os }}-
+          workspaces: './src-tauri -> target'
+          shared-key: ${{ matrix.platform == 'macos-latest' && 'universal-macos' || '' }}
+          cache-all-crates: true
 
       - name: Install dependencies (npm)
         if: ${{ steps.check.outputs.run == 'true' }}
@@ -207,35 +182,12 @@ jobs:
           releaseName: 'File Organizer v__VERSION__'
           args: >-
             ${{ runner.os == 'macOS' && '--target universal-apple-darwin' || '' }}
-
-      # - name: Build Tauri App (verbose + capture logs)
-      #   if: ${{ steps.check.outputs.run == 'true' && matrix.platform == 'macos-latest' }}
-      #   env:
-      #     RUST_BACKTRACE: 1
-      #     RUST_LOG: debug
-      #     CARGO_TERM_COLOR: always
-      #     APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-      #     APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-      #     APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-      #     APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-      #     APPLE_ID: ${{ secrets.APPLE_ID }}
-      #     APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}          
-      #   run: |
-      #     # run tauri build with verbose output captured
-      #     npm run tauri build -- --target universal-apple-darwin --verbose 2>&1 | tee build-logs/tauri-build.log || true
-      
-      #     # run codesign verification to get detailed failure info
-      #     APP_PATH=$(ls -d src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app | head -n1)
-      #     echo "APP_PATH=$APP_PATH" | tee build-logs/paths.log
-      #     codesign --verify --deep --strict --verbose=4 "$APP_PATH" 2>&1 | tee build-logs/codesign-verify.log || true
-      #     codesign --display --verbose=4 "$APP_PATH" 2>&1 | tee build-logs/codesign-display.log || true
-      #     spctl -a -v --type exec "$APP_PATH" 2>&1 | tee build-logs/spctl.log || true
         continue-on-error: true
 
       # ----- Upload logs for debugging (macOS only) -----
-      - name: Upload tauri macOS debug logs
-        if: ${{ steps.check.outputs.run == 'true' && matrix.platform == 'macos-latest' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: tauri-macos-debug-logs
-          path: build-logs/
+      # - name: Upload tauri macOS debug logs
+      #   if: ${{ steps.check.outputs.run == 'true' && matrix.platform == 'macos-latest' }}
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: tauri-macos-debug-logs
+      #     path: build-logs/
