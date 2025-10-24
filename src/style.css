@@ -421,6 +421,55 @@ tbody tr:hover {
   background: var(--hover-bg);
 }
 
+/* Optimized row highlighting */
+tbody tr.optimized-row {
+  background: rgba(52, 199, 89, 0.08);
+  animation: highlightPulse 2s ease-in-out;
+}
+
+tbody tr.optimized-row:hover {
+  background: rgba(52, 199, 89, 0.15);
+}
+
+body.dark-theme tbody tr.optimized-row {
+  background: rgba(48, 209, 88, 0.12);
+}
+
+body.dark-theme tbody tr.optimized-row:hover {
+  background: rgba(48, 209, 88, 0.2);
+}
+
+@keyframes highlightPulse {
+  0%, 100% {
+    box-shadow: inset 0 0 0 0 transparent;
+  }
+  50% {
+    box-shadow: inset 0 0 0 2px var(--accent-green);
+  }
+}
+
+/* Optimized category input highlighting */
+td input.optimized-category {
+  border-color: var(--accent-green);
+  background: rgba(52, 199, 89, 0.05);
+  font-weight: 600;
+}
+
+td input.optimized-category:focus {
+  border-color: var(--accent-green);
+  box-shadow: 0 0 0 3px rgba(52, 199, 89, 0.2);
+}
+
+body.dark-theme td input.optimized-category {
+  border-color: var(--accent-green);
+  background: rgba(48, 209, 88, 0.1);
+}
+
+body.dark-theme td input.optimized-category:focus {
+  border-color: var(--accent-green);
+  box-shadow: 0 0 0 3px rgba(48, 209, 88, 0.2);
+}
+
 td code {
   font-family: 'SF Mono', Monaco, Menlo, monospace;
   font-size: 11px;
@@ -530,6 +579,39 @@ td input[type="checkbox"] {
   align-items: center;
   flex-wrap: wrap;
 }
+
+/* Optimization badge */
+.optimization-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  background: var(--accent-green);
+  color: white;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  box-shadow: 0 2px 4px rgba(52, 199, 89, 0.3);
+  animation: badgeFadeIn 0.3s ease-out;
+}
+
+body.dark-theme .optimization-badge {
+  background: var(--accent-green);
+  box-shadow: 0 2px 4px rgba(48, 209, 88, 0.4);
+}
+
+@keyframes badgeFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 .scroll-x {
   overflow-x: auto;
   overflow-y: auto;

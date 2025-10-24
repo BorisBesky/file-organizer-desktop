@@ -544,19 +544,51 @@ export async function optimizeCategoriesViaLLM(opts: {
     .map(([category, files]) => `${category}/ (${files.length} files)\n  - ${files.slice(0, 5).join('\n  - ')}${files.length > 5 ? `\n  - ... and ${files.length - 5} more` : ''}`)
     .join('\n\n');
 
-  const promptTemplate = 
-  `You are a file organization optimizer. Analyze this directory structure and suggest optimizations to merge similar categories.
+const promptTemplate = 
+`You are a file organization optimizer. Analyze this directory structure and suggest optimizations.
 
-Focus on:
-1. Merging categories with similar meanings
-2. Consolidating subcategories that are too granular
-3. Improving category naming consistency
-4. Reducing redundant categories
+**Category Structure Rules**:
+- All categories MUST follow 2-level format: "FirstLevel/SecondLevel"
+- First level categories: Business, Personal, Finance, Health, Education, Entertainment, Work, Travel, Legal, Technology, Science, Art, Music, Sports, Media, Documents, Archives
+- Use Title Case for all category names
 
-Reply in strict JSON with key "optimizations" containing an array of objects with keys: "from" (current category), "to" (suggested category), "reason" (explanation).
+**Optimization Goals**:
+1. **Merge similar categories**: Combine categories with overlapping meanings
+   - Example: "Work/Meeting Notes" + "Work/Meeting Minutes" → "Work/Notes"
+2. **Consolidate granular subcategories**: Simplify overly specific second-level categories
+   - Example: "Finance/Tax Returns 2023" + "Finance/Tax Returns 2024" → "Finance/Tax Returns"
+3. **Fix naming inconsistencies**: Standardize capitalization and terminology
+   - Example: "finance/invoices" → "Finance/Invoices"
+4. **Reduce redundancy**: Remove duplicate or near-duplicate categories
+   - Example: "Personal/Photos" + "Personal/Pictures" → "Personal/Photos"
 
-Current directory structure:
-${treeText}`;
+**When NOT to merge**:
+- Categories with >20 files each that serve distinct purposes
+- Categories where content is fundamentally different despite similar names
+- First-level categories (never merge these)
+
+**Output Format**: Return ONLY valid JSON with this structure:
+{
+  "optimizations": [
+    {
+      "from": "Current/Category/Path",
+      "to": "Suggested/Category/Path",
+      "reason": "Brief explanation (max 100 chars)",
+      "file_count": 5,
+      "priority": "high"
+    }
+  ]
+}
+
+**Priority Levels**:
+- "high": Obvious duplicates, incorrect format, critical naming issues
+- "medium": Similar categories that could be merged, minor inconsistencies
+- "low": Optional consolidations for cleaner structure
+
+**Current directory structure**:
+${treeText}
+
+Analyze and suggest optimizations. Focus on high-impact changes first. Limit to 10 most important optimizations.`;
 
   const systemMessage = config.systemMessage || 'Return only valid JSON (no markdown), with key "optimizations" containing an array of optimization suggestions.';
   

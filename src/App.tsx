@@ -123,6 +123,7 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [events, setEvents] = useState<string[]>([]);
   const [rows, setRows] = useState<Row[]>([]);
+  const [optimizedCategories, setOptimizedCategories] = useState<Set<string>>(new Set());
   const [progress, setProgress] = useState({ current: 0, total: 0 });
   const [statusExpanded, setStatusExpanded] = useState(true);
   const [helpOpen, setHelpOpen] = useState(false);
@@ -621,16 +622,21 @@ export default function App() {
       if (result.optimizations && result.optimizations.length > 0) {
         setEvents((prev: string[]) => [`Found ${result.optimizations.length} optimization suggestions:`, ...prev]);
         
+        // Track which categories were optimized
+        const optimizedCats = new Set<string>();
+        
         // Apply optimizations to rows
         const updatedRows = rows.map(row => {
           const optimization = result.optimizations.find((opt: { from: string; to: string; reason: string }) => opt.from === row.category);
           if (optimization) {
+            optimizedCats.add(optimization.to);
             setEvents((prev: string[]) => [`  ${optimization.from} → ${optimization.to}: ${optimization.reason}`, ...prev]);
             return { ...row, category: optimization.to };
           }
           return row;
         });
         
+        setOptimizedCategories(optimizedCats);
         setRows(updatedRows);
         setEvents((prev: string[]) => ['Applied category optimizations successfully.', ...prev]);
       } else {
@@ -687,6 +693,21 @@ export default function App() {
   };
 
   const updateRow = (i: number, patch: Partial<Row>) => {
+    // If category is being updated manually, remove it from optimized set
+    if (patch.category !== undefined) {
+      const oldCategory = rows[i]?.category;
+      if (oldCategory && optimizedCategories.has(oldCategory)) {
+        setOptimizedCategories(prev => {
+          const updated = new Set(prev);
+          // Only remove if no other rows still use this category
+          const stillUsed = rows.some((r, idx) => idx !== i && r.category === oldCategory);
+          if (!stillUsed) {
+            updated.delete(oldCategory);
+          }
+          return updated;
+        });
+      }
+    }
     setRows((prev: Row[]) => prev.map((r: Row, idx: number) => idx === i ? { ...r, ...patch } : r));
   };
 
@@ -696,6 +717,7 @@ export default function App() {
     setEvents([]);
     setProgress({ current: 0, total: 0 });
     setBusy(false);
+    setOptimizedCategories(new Set());
     scanControlRef.current = {
       shouldStop: false,
       currentFileIndex: 0,
@@ -983,6 +1005,11 @@ export default function App() {
                   <button className="secondary" onClick={optimizeCategories} disabled={busy}>
                     Optimize Categories
                   </button>
+                  {optimizedCategories.size > 0 && (
+                    <span className="optimization-badge" title={`${optimizedCategories.size} categories were optimized`}>
+                      ✓ {optimizedCategories.size} optimized
+                    </span>
+                  )}
                   <button onClick={applyMoves} disabled={busy}>Approve Selected</button>
                 </div>
               </div>
@@ -1052,8 +1079,9 @@ export default function App() {
                     {getSortedRows().map((r: Row, i: number) => {
                       // Find the original index in the unsorted array for updates
                       const originalIndex = rows.findIndex(row => row.src === r.src);
+                      const isOptimized = optimizedCategories.has(r.category);
                       return (
-                        <tr key={originalIndex}>
+                        <tr key={originalIndex} className={isOptimized ? 'optimized-row' : ''}>
                           <td><input aria-label={`Select ${r.src}`} type="checkbox" checked={!!r.enabled} onChange={e => updateRow(originalIndex, { enabled: e.target.checked })} /></td>
                           <td>
                             <code 
@@ -1064,7 +1092,16 @@ export default function App() {
                               {getRelativePath(r.src)}
                             </code>
                           </td>
-                          <td><input aria-label={`Category for ${r.src}`} type="text" value={r.category} placeholder="Category" onChange={e => updateRow(originalIndex, { category: e.target.value })} /></td>
+                          <td>
+                            <input 
+                              aria-label={`Category for ${r.src}`} 
+                              type="text" 
+                              value={r.category} 
+                              placeholder="Category" 
+                              onChange={e => updateRow(originalIndex, { category: e.target.value })}
+                              className={isOptimized ? 'optimized-category' : ''}
+                            />
+                          </td>
                           <td><input aria-label={`Name for ${r.src}`} type="text" value={r.name} placeholder="New filename" onChange={e => updateRow(originalIndex, { name: e.target.value })} /></td>
                           <td>{r.ext}</td>
                         </tr>
