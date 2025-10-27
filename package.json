@@ -12,7 +12,8 @@
     "test:ollama": "ts-node --esm tests/ollama-response.test.ts",
     "test:lmstudio": "ts-node --esm tests/lmstudio-connection.test.ts",
     "test:custom-llm": "ts-node --esm tests/custom-llm-with-headers.test.ts",
-    "test:custom-llm-standalone": "tsx tests/custom-llm-standalone.test.ts"
+    "test:custom-llm-standalone": "tsx tests/custom-llm-standalone.test.ts",
+    "test:optimization": "tsx tests/process-optimization-response.test.ts"
   },
   "dependencies": {
     "@tauri-apps/api": "^1.5.3",

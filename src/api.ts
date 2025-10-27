@@ -297,40 +297,78 @@ function buildRequestBody(config: LLMConfig, prompt: string, systemMessage: stri
   }
 }
 
-export function normalizeOllamaContent(rawContent: unknown): string {
+
+/**
+ * Normalizes heterogeneous "content" structures returned by different LLM providers
+ * into a single plain string. It:
+ * - Recursively extracts textual content from strings, arrays, and objects
+ * - Skips known "thinking/reasoning/metadata" parts that shouldn't be surfaced
+ * - Strips provider-specific <think>...</think> blocks (e.g., DeepSeek R1 style)
+ * - Returns "{}" as a safe non-empty fallback (useful when the caller expects JSON)
+ */
+export function normalizeLLMContent(rawContent: unknown): string {
+  /**
+   * Recursively extract text from possible shapes:
+   * - string: return as-is
+   * - array: flatten by concatenation
+   * - object: prefer .text; otherwise recurse into .content; or use .value
+   * Skips objects whose .type is known to hold internal reasoning or metadata
+   */
   const extractText = (value: unknown): string => {
     if (!value) return '';
     if (typeof value === 'string') return value;
+
     if (Array.isArray(value)) {
+      // Flatten arrays of mixed content by concatenating their extracted text
       return value.map((item) => extractText(item)).join('');
     }
+
     if (typeof value === 'object') {
       const maybeRecord = value as Record<string, unknown>;
+
+      // If object declares a content "type", filter out hidden/internal sections
       const type = typeof maybeRecord.type === 'string' ? maybeRecord.type.toLowerCase() : undefined;
       if (type && ['thinking', 'reasoning', 'metadata'].includes(type)) {
         return '';
       }
+
+      // Common content carriers used by providers
       if (typeof maybeRecord.text === 'string') return maybeRecord.text;
       if (maybeRecord.content !== undefined) return extractText(maybeRecord.content);
       if (typeof maybeRecord.value === 'string') return maybeRecord.value;
     }
+
     return '';
   };
 
+  /**
+   * Remove provider-specific hidden reasoning blocks: <think> ... </think>
+   * Seen in some reasoning models (e.g., DeepSeek R1). Case-insensitive, multiline-safe.
+   */
   const stripThinking = (value: string): string =>
     value.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
 
+  // 1) Flatten the raw provider content into a single string
   const flattened = extractText(rawContent);
+
+  // 2) Strip any embedded hidden reasoning tags
   const cleaned = stripThinking(flattened);
+
+  // 3) Provide a safe non-empty fallback to keep downstream JSON parsing paths stable
   return cleaned || '{}';
 }
 
-function safeParseJson<T>(payload: string, fallback: () => T): T {
+export function safeParseJson<T>(payload: string, fallback: () => T): T {
   try {
     return JSON.parse(payload) as T;
   } catch (primaryError) {
     try {
-      const match = payload.match(/\{[\s\S]*\}/);
+      const trimmed = payload.replace(/^```json\s*/, '') // Remove opening markdown
+        .replace(/```[\s\S]*$/, '') // Remove closing markdown and everything after
+        .replace(/\\"/g, '"') // Unescape quotes
+        .trim();
+      // Secondary attempt: extract JSON object from string. This handles cases where LLMs wrap JSON in extra text.
+      const match = trimmed.match(/\{[\s\S]*\}/);
       if (match) {
         return JSON.parse(match[0]) as T;
       }
@@ -359,7 +397,7 @@ function extractContent(config: LLMConfig, data: any): string {
       break;
   }
 
-  return normalizeOllamaContent(rawContent);
+  return normalizeLLMContent(rawContent);
 }
 
 // Unified function that works with any LLM provider
@@ -514,26 +552,6 @@ export async function classifyViaLLM(opts: {
   }));
 }
 
-// Backward compatibility wrapper for LM Studio
-export async function classifyViaLMStudio(opts: {
-  baseUrl: string,
-  model: string,
-  text: string,
-  originalName: string,
-  categoriesHint: string[],
-}): Promise<{ category_path: string; suggested_filename: string; confidence: number; raw?: any }>{
-  return classifyViaLLM({
-    config: {
-      provider: 'lmstudio',
-      baseUrl: opts.baseUrl,
-      model: opts.model,
-    },
-    text: opts.text,
-    originalName: opts.originalName,
-    categoriesHint: opts.categoriesHint,
-  });
-}
-
 export async function optimizeCategoriesViaLLM(opts: {
   config: LLMConfig,
   directoryTree: { [category: string]: string[] },
@@ -541,7 +559,7 @@ export async function optimizeCategoriesViaLLM(opts: {
   const { config, directoryTree } = opts;
   
   const treeText = Object.entries(directoryTree)
-    .map(([category, files]) => `${category}/ (${files.length} files)\n  - ${files.slice(0, 5).join('\n  - ')}${files.length > 5 ? `\n  - ... and ${files.length - 5} more` : ''}`)
+    .map(([category, files]) => `${category}/ (${files.length} files)`)
     .join('\n\n');
 
 const promptTemplate = 
@@ -549,46 +567,30 @@ const promptTemplate =
 
 **Category Structure Rules**:
 - All categories MUST follow 2-level format: "FirstLevel/SecondLevel"
-- First level categories: Business, Personal, Finance, Health, Education, Entertainment, Work, Travel, Legal, Technology, Science, Art, Music, Sports, Media, Documents, Archives
-- Use Title Case for all category names
+- Example first level broad categories: Finance, Health, Education, Entertainment, Work, Travel, Legal, Technology, Science, Art, Music, Sports, Media, Shopping
 
 **Optimization Goals**:
 1. **Merge similar categories**: Combine categories with overlapping meanings
    - Example: "Work/Meeting Notes" + "Work/Meeting Minutes" → "Work/Notes"
 2. **Consolidate granular subcategories**: Simplify overly specific second-level categories
    - Example: "Finance/Tax Returns 2023" + "Finance/Tax Returns 2024" → "Finance/Tax Returns"
-3. **Fix naming inconsistencies**: Standardize capitalization and terminology
-   - Example: "finance/invoices" → "Finance/Invoices"
-4. **Reduce redundancy**: Remove duplicate or near-duplicate categories
-   - Example: "Personal/Photos" + "Personal/Pictures" → "Personal/Photos"
-
-**When NOT to merge**:
-- Categories with >20 files each that serve distinct purposes
-- Categories where content is fundamentally different despite similar names
-- First-level categories (never merge these)
+3. **Correct naming inconsistencies**: Standardize category names for uniformity
 
 **Output Format**: Return ONLY valid JSON with this structure:
 {
   "optimizations": [
     {
-      "from": "Current/Category/Path",
-      "to": "Suggested/Category/Path",
+      "from": "Current category path",
+      "to": "Suggested category path",
       "reason": "Brief explanation (max 100 chars)",
-      "file_count": 5,
-      "priority": "high"
     }
   ]
 }
 
-**Priority Levels**:
-- "high": Obvious duplicates, incorrect format, critical naming issues
-- "medium": Similar categories that could be merged, minor inconsistencies
-- "low": Optional consolidations for cleaner structure
-
 **Current directory structure**:
 ${treeText}
 
-Analyze and suggest optimizations. Focus on high-impact changes first. Limit to 10 most important optimizations.`;
+Analyze and suggest optimizations. Focus on similar categories that could be merged, naming inconsistencies changes first. Limit to 10 most important optimizations.`;
 
   const systemMessage = config.systemMessage || 'Return only valid JSON (no markdown), with key "optimizations" containing an array of optimization suggestions.';
   
@@ -610,6 +612,12 @@ Analyze and suggest optimizations. Focus on high-impact changes first. Limit to 
   if (!resp.ok) {
     throw new Error(`${config.provider} API error: ${resp.status}\n${resp.data}`);
   }
+
+  return processOptimizationResponse(config, resp);
+}
+
+export function processOptimizationResponse(config: LLMConfig, resp: { ok: boolean; status: number; data: string }): 
+  { optimizations: { from: string; to: string; reason: string }[] } {
   
   // Parse the response text as JSON
   let data;
@@ -620,7 +628,28 @@ Analyze and suggest optimizations. Focus on high-impact changes first. Limit to 
   }
 
   const content = extractContent(config, data);
-  return safeParseJson(content, () => ({ optimizations: [] }));
+  const jsonResult = safeParseJson<{ optimizations: { from: string; to: string; reason: string }[] }>(content, () => ({ optimizations: [] }));
+  // Validate structure
+  if (Array.isArray(jsonResult.optimizations)) {
+    // Further validate each optimization entry
+    // only keep those with valid from, to, reason strings
+    // from should be a valid category path (e.g., "Finance/Invoices"), any trailing forward or backward slashes will be trimmed
+    const trimTrailingSlash = (path: string) => path.replace(/[\/\\]+$/, '');
+    
+    const validOptimizations = jsonResult.optimizations
+      .filter(opt =>
+        typeof opt.from === 'string' &&
+        typeof opt.to === 'string' &&
+        typeof opt.reason === 'string'
+      )
+      .map(opt => ({
+        from: trimTrailingSlash(opt.from),
+        to: trimTrailingSlash(opt.to),
+        reason: opt.reason,
+      }));
+    return { optimizations: validOptimizations };
+  }
+  return jsonResult;
 }
 
 // Open a file using the operating system's default application
@@ -630,22 +659,6 @@ export async function openFile(path: string): Promise<void> {
   } catch (error: any) {
     throw new Error(`Failed to open file: ${error.message || String(error)}`);
   }
-}
-
-// Backward compatibility wrapper for LM Studio
-export async function optimizeCategoriesViaLMStudio(opts: {
-  baseUrl: string,
-  model: string,
-  directoryTree: { [category: string]: string[] },
-}): Promise<{ optimizations: { from: string; to: string; reason: string }[] }> {
-  return optimizeCategoriesViaLLM({
-    config: {
-      provider: 'lmstudio',
-      baseUrl: opts.baseUrl,
-      model: opts.model,
-    },
-    directoryTree: opts.directoryTree,
-  });
 }
 
 // Helpers to list available local models for Ollama and LM Studio

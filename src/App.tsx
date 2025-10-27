@@ -123,12 +123,17 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [events, setEvents] = useState<string[]>([]);
   const [rows, setRows] = useState<Row[]>([]);
-  const [optimizedCategories, setOptimizedCategories] = useState<Set<string>>(new Set());
+  const [optimizedCategories, setOptimizedCategories] = useState<{ categories: Set<string>; count: number; total: number }>({
+    categories: new Set(),
+    count: 0,
+    total: 0,
+  });
   const [progress, setProgress] = useState({ current: 0, total: 0 });
   const [statusExpanded, setStatusExpanded] = useState(true);
   const [helpOpen, setHelpOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [isOptimizing, setIsOptimizing] = useState(false);
+  const [showOptimizationResult, setShowOptimizationResult] = useState(false);
   const optimizationCancelRef = useRef(false);
   
   // Sorting state
@@ -560,6 +565,8 @@ export default function App() {
     setScanState('scanning');
     setEvents([]);
     setRows([]);
+    // Reset any previous optimization markers when starting a fresh scan
+    setOptimizedCategories({ categories: new Set(), count: 0, total: 0 });
     setProgress({ current: 0, total: 0 });
 
     try {
@@ -585,6 +592,7 @@ export default function App() {
     
     setBusy(true);
     setIsOptimizing(true);
+    setShowOptimizationResult(false);
     optimizationCancelRef.current = false;
     setEvents((prev: string[]) => ['Analyzing directory structure for optimizations...', ...prev]);
     
@@ -620,27 +628,51 @@ export default function App() {
       }
       
       if (result.optimizations && result.optimizations.length > 0) {
-        setEvents((prev: string[]) => [`Found ${result.optimizations.length} optimization suggestions:`, ...prev]);
+        setEvents((prev: string[]) => [`Found ${result.optimizations.length} optimization suggestions`, ...prev]);
         
         // Track which categories were optimized
         const optimizedCats = new Set<string>();
+        const totalOptimizations = result.optimizations.length;
+        let appliedCount = 0;
         
         // Apply optimizations to rows
         const updatedRows = rows.map(row => {
           const optimization = result.optimizations.find((opt: { from: string; to: string; reason: string }) => opt.from === row.category);
           if (optimization) {
             optimizedCats.add(optimization.to);
+            appliedCount++;
+            // Update progress as we apply optimizations
+            setOptimizedCategories({
+              categories: new Set(optimizedCats),
+              count: appliedCount,
+              total: totalOptimizations,
+            });
             setEvents((prev: string[]) => [`  ${optimization.from} → ${optimization.to}: ${optimization.reason}`, ...prev]);
             return { ...row, category: optimization.to };
           }
           return row;
         });
         
-        setOptimizedCategories(optimizedCats);
+        setOptimizedCategories({
+          categories: optimizedCats,
+          count: totalOptimizations,
+          total: totalOptimizations,
+        });
         setRows(updatedRows);
-        setEvents((prev: string[]) => ['Applied category optimizations successfully.', ...prev]);
+        setEvents((prev: string[]) => [`Applied ${totalOptimizations} category optimizations successfully.`, ...prev]);
+        setShowOptimizationResult(true);
+        // Auto-dismiss after 3 seconds
+        setTimeout(() => {
+          setShowOptimizationResult(false);
+        }, 3000);
       } else {
         setEvents((prev: string[]) => ['No optimizations suggested - directory structure looks good!', ...prev]);
+        setOptimizedCategories({ categories: new Set(), count: 0, total: 0 });
+        setShowOptimizationResult(true);
+        // Auto-dismiss after 3 seconds
+        setTimeout(() => {
+          setShowOptimizationResult(false);
+        }, 3000);
       }
     } catch (e: any) {
       if (optimizationCancelRef.current) {
@@ -648,6 +680,7 @@ export default function App() {
       } else {
         setEvents((prev: string[]) => [`Failed to optimize categories: ${e?.message || String(e)}`, ...prev]);
       }
+      setShowOptimizationResult(false);
     }
     
     setBusy(false);
@@ -696,15 +729,19 @@ export default function App() {
     // If category is being updated manually, remove it from optimized set
     if (patch.category !== undefined) {
       const oldCategory = rows[i]?.category;
-      if (oldCategory && optimizedCategories.has(oldCategory)) {
+      if (oldCategory && optimizedCategories.categories.has(oldCategory)) {
         setOptimizedCategories(prev => {
-          const updated = new Set(prev);
+          const updated = new Set(prev.categories);
           // Only remove if no other rows still use this category
           const stillUsed = rows.some((r, idx) => idx !== i && r.category === oldCategory);
           if (!stillUsed) {
             updated.delete(oldCategory);
           }
-          return updated;
+          return {
+            categories: updated,
+            count: updated.size,
+            total: prev.total,
+          };
         });
       }
     }
@@ -717,7 +754,8 @@ export default function App() {
     setEvents([]);
     setProgress({ current: 0, total: 0 });
     setBusy(false);
-    setOptimizedCategories(new Set());
+    setOptimizedCategories({ categories: new Set(), count: 0, total: 0 });
+    setShowOptimizationResult(false);
     scanControlRef.current = {
       shouldStop: false,
       currentFileIndex: 0,
@@ -875,37 +913,56 @@ export default function App() {
             </div>
           )}
           
-          {isOptimizing && (
+          {(isOptimizing || showOptimizationResult) && (
             <div className="header-progress">
               <div className="progress-label">
-                Optimizing Directory Structure
+                {isOptimizing ? 'Optimizing Directory Structure' : 'Optimization Complete'}
               </div>
               <div className="progress-container">
-                <div className="progress-bar progress-bar-indeterminate" />
+                {optimizedCategories.total > 0 ? (
+                  <div 
+                    className="progress-bar progress-bar-completed"
+                    style={{ width: `${(optimizedCategories.count / optimizedCategories.total) * 100}%` }}
+                  />
+                ) : (
+                  <div className="progress-bar progress-bar-indeterminate" />
+                )}
               </div>
               <div className="progress-text">
-                Analyzing categories and generating optimization suggestions...
-                <button 
-                  className="cancel-optimization-btn"
-                  onClick={cancelOptimization}
-                  title="Cancel optimization"
-                >
-                  Cancel
-                </button>
+                {optimizedCategories.total > 0 
+                  ? `Applied ${optimizedCategories.count} of ${optimizedCategories.total} optimizations`
+                  : isOptimizing
+                  ? 'Analyzing categories and generating optimization suggestions...'
+                  : 'No optimizations suggested - directory structure looks good!'
+                }
+                {isOptimizing && (
+                  <button 
+                    className="cancel-optimization-btn"
+                    onClick={cancelOptimization}
+                    title="Cancel optimization"
+                  >
+                    Cancel
+                  </button>
+                )}
               </div>
             </div>
           )}
 
           {!!events.length && (
             <div className="header-status">
-              <button
-                type="button"
-                className="status-toggle"
-                onClick={() => setStatusExpanded(!statusExpanded)}
-              >
-                <span className="toggle-icon">{statusExpanded ? '▼' : '▶'}</span>
-                <span>Status Log</span>
-              </button>
+              <div className="status-header-row">
+                <button
+                  type="button"
+                  className="status-toggle"
+                  onClick={() => setStatusExpanded(!statusExpanded)}
+                >
+                  <span className="toggle-icon">{statusExpanded ? '▼' : '▶'}</span>
+                  <span>Status Log</span>
+                </button>
+                <div className="status-latest">
+                  {events[0]}
+                </div>
+              </div>
               {statusExpanded && (
                 <textarea
                   readOnly
@@ -1005,11 +1062,6 @@ export default function App() {
                   <button className="secondary" onClick={optimizeCategories} disabled={busy}>
                     Optimize Categories
                   </button>
-                  {optimizedCategories.size > 0 && (
-                    <span className="optimization-badge" title={`${optimizedCategories.size} categories were optimized`}>
-                      ✓ {optimizedCategories.size} optimized
-                    </span>
-                  )}
                   <button onClick={applyMoves} disabled={busy}>Approve Selected</button>
                 </div>
               </div>
@@ -1079,7 +1131,7 @@ export default function App() {
                     {getSortedRows().map((r: Row, i: number) => {
                       // Find the original index in the unsorted array for updates
                       const originalIndex = rows.findIndex(row => row.src === r.src);
-                      const isOptimized = optimizedCategories.has(r.category);
+                      const isOptimized = optimizedCategories.categories.has(r.category);
                       return (
                         <tr key={originalIndex} className={isOptimized ? 'optimized-row' : ''}>
                           <td><input aria-label={`Select ${r.src}`} type="checkbox" checked={!!r.enabled} onChange={e => updateRow(originalIndex, { enabled: e.target.checked })} /></td>

@@ -120,6 +120,8 @@ body {
 
 .header-content {
   flex-grow: 1;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .header-toggle-container {
@@ -152,6 +154,17 @@ body {
 
 .header-status {
   margin-top: 12px;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.status-header-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .status-toggle {
@@ -166,10 +179,26 @@ body {
   cursor: pointer;
   color: var(--text-primary);
   height: auto;
+  flex-shrink: 0;
 }
 
 .status-toggle:hover {
   opacity: 0.7;
+}
+
+.status-latest {
+  flex: 1;
+  padding: 6px 12px;
+  background: var(--status-running-bg);
+  color: var(--status-running-text);
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .app-main {
@@ -865,6 +894,7 @@ label input[type="checkbox"] {
 }
 .status-textarea {
   width: 100%;
+  max-width: 100%;
   resize: vertical;
   font-family: 'SF Mono', Monaco, Menlo, monospace;
   font-size: 11px;
@@ -877,6 +907,9 @@ label input[type="checkbox"] {
   min-height: 120px;
   box-sizing: border-box;
   margin-top: 0;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-wrap: break-word;
 }
 
 .status-textarea::-webkit-scrollbar {
