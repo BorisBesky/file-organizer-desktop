@@ -57,12 +57,22 @@ export default function HelpDialog({ isOpen, onClose }: HelpDialogProps) {
 
           <section className="help-section">
             <h3>Features</h3>
+            <h4>Organize Mode (AI-Powered)</h4>
             <ul>
               <li><strong>Pause/Resume:</strong> You can pause the scan at any time and resume later without losing progress.</li>
               <li><strong>Stop & Continue:</strong> Stop the scan to review current results, then continue if needed.</li>
               <li><strong>Optimize Categories:</strong> After scanning, click "Optimize Categories" to let AI suggest improvements to your category structure.</li>
               <li><strong>Include Subdirectories:</strong> Check this option to scan files in all subdirectories recursively.</li>
               <li><strong>Auto-Optimization:</strong> Categories are automatically optimized after each scan completes.</li>
+            </ul>
+            
+            <h4>Analyze Mode (File Cleanup)</h4>
+            <ul>
+              <li><strong>Find Duplicates:</strong> Identifies files with identical content using SHA256 hashing. Shows wasted disk space and groups duplicate files together. Automatically suggests keeping one copy while allowing deletion of others.</li>
+              <li><strong>Find Unused Files:</strong> Locates files that haven't been accessed within a specified time period (configurable threshold in days). Useful for cleaning up old downloads, temporary files, or forgotten archives.</li>
+              <li><strong>Find Unreferenced Files:</strong> Scans your project files to find assets and files that aren't referenced by any other files. Helps identify orphaned files, unused dependencies, and forgotten resources.</li>
+              <li><strong>Bulk Operations:</strong> Select multiple files and delete them in batch. Click on any file path to open it directly in your default application.</li>
+              <li><strong>Smart Filtering:</strong> Switch between Duplicates, Unused, and Unreferenced tabs to focus on specific cleanup tasks.</li>
             </ul>
           </section>
 
@@ -93,6 +103,7 @@ export default function HelpDialog({ isOpen, onClose }: HelpDialogProps) {
 
           <section className="help-section">
             <h3>💡 Tips</h3>
+            <h4>Organize Mode:</h4>
             <ul>
               <li>Test your LLM connection before scanning large directories.</li>
               <li>Start with a small folder to verify the AI categorizes files the way you want.</li>
@@ -101,6 +112,16 @@ export default function HelpDialog({ isOpen, onClose }: HelpDialogProps) {
               <li>The app skips hidden files (starting with ".").</li>
               <li>Only text-readable files are classified. Binary files are skipped but logged.</li>
               <li>For the Managed Local LLM option, the app will automatically download and start a server for you - no manual setup required.</li>
+            </ul>
+            
+            <h4>Analyze Mode:</h4>
+            <ul>
+              <li>Always review files before deleting to avoid losing important data.</li>
+              <li>For duplicates, the first file in each group is marked as "keep" and cannot be selected for deletion.</li>
+              <li>Adjust the "unused files" threshold based on your workflow - shorter for frequently accessed folders, longer for archives.</li>
+              <li>Unreferenced file detection works best on code/project directories with imports and references.</li>
+              <li>Sort results by size to prioritize files that will free up the most disk space.</li>
+              <li>Use "Select All" to quickly select all files in a category, then deselect specific ones you want to keep.</li>
             </ul>
           </section>
 

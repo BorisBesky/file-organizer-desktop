@@ -753,3 +753,64 @@ export async function getManagedLLMServerInfo(): Promise<ManagedLLMServerInfo> {
     throw new Error(`Failed to get server info: ${error.message || String(error)}`);
   }
 }
+
+// File analysis functions
+export async function findDuplicateFiles(
+  path: string,
+  includeSubdirectories: boolean
+): Promise<import('./types').DuplicateFileGroup[]> {
+  try {
+    return await invoke<import('./types').DuplicateFileGroup[]>('find_duplicate_files', {
+      path,
+      includeSubdirectories,
+    });
+  } catch (error: any) {
+    throw new Error(`Failed to find duplicate files: ${error.message || String(error)}`);
+  }
+}
+
+export async function findUnusedFiles(
+  path: string,
+  includeSubdirectories: boolean,
+  daysThreshold: number
+): Promise<import('./types').UnusedFileInfo[]> {
+  try {
+    return await invoke<import('./types').UnusedFileInfo[]>('find_unused_files', {
+      path,
+      includeSubdirectories,
+      daysThreshold,
+    });
+  } catch (error: any) {
+    throw new Error(`Failed to find unused files: ${error.message || String(error)}`);
+  }
+}
+
+export async function findUnreferencedFiles(
+  path: string,
+  includeSubdirectories: boolean
+): Promise<import('./types').UnreferencedFileInfo[]> {
+  try {
+    return await invoke<import('./types').UnreferencedFileInfo[]>('find_unreferenced_files', {
+      path,
+      includeSubdirectories,
+    });
+  } catch (error: any) {
+    throw new Error(`Failed to find unreferenced files: ${error.message || String(error)}`);
+  }
+}
+
+export async function analyzeDirectoryFiles(
+  path: string,
+  includeSubdirectories: boolean,
+  unusedDaysThreshold: number
+): Promise<import('./types').FileAnalysisResult> {
+  try {
+    return await invoke<import('./types').FileAnalysisResult>('analyze_directory_files', {
+      path,
+      includeSubdirectories,
+      unusedDaysThreshold,
+    });
+  } catch (error: any) {
+    throw new Error(`Failed to analyze directory: ${error.message || String(error)}`);
+  }
+}

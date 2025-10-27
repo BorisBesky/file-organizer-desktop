@@ -51,3 +51,32 @@ export interface ManagedLLMConfig {
   // Environment variables for the server
   env_vars: Record<string, string>;
 }
+
+// File analysis types
+export interface DuplicateFileGroup {
+  hash: string;
+  size: number;
+  files: string[];
+}
+
+export interface UnusedFileInfo {
+  path: string;
+  size: number;
+  last_accessed: string | null;
+  last_modified: string | null;
+  days_since_access: number | null;
+}
+
+export interface UnreferencedFileInfo {
+  path: string;
+  size: number;
+  extension: string;
+}
+
+export interface FileAnalysisResult {
+  duplicates: DuplicateFileGroup[];
+  unused: UnusedFileInfo[];
+  unreferenced: UnreferencedFileInfo[];
+}
+
+export type FileAnalysisTab = 'duplicates' | 'unused' | 'unreferenced';

@@ -10,7 +10,7 @@ use std::thread;
 use std::panic;
 use std::sync::{Mutex, OnceLock, Arc};
 use std::process::{Child, Command, Stdio};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use tauri::api::dialog::FileDialogBuilder;
 use tauri::{command, AppHandle, Manager, CustomMenuItem, Menu, MenuItem, Submenu, WindowMenuEvent, State};
 use walkdir::WalkDir;
@@ -22,6 +22,8 @@ use serde::{Deserialize, Serialize};
 use zip::ZipArchive;
 use flate2::read::GzDecoder;
 use tar::Archive;
+use sha2::{Sha256, Digest};
+use regex::Regex;
 
 // Managed LLM Server types
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -774,6 +776,337 @@ async fn get_llm_server_info(app: AppHandle, state: State<'_, ManagedLLMState>) 
     get_llm_server_status(app, state).await
 }
 
+// Types for file analysis results
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DuplicateFileGroup {
+    pub hash: String,
+    pub size: u64,
+    pub files: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UnusedFileInfo {
+    pub path: String,
+    pub size: u64,
+    pub last_accessed: Option<String>,
+    pub last_modified: Option<String>,
+    pub days_since_access: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UnreferencedFileInfo {
+    pub path: String,
+    pub size: u64,
+    pub extension: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FileAnalysisResult {
+    pub duplicates: Vec<DuplicateFileGroup>,
+    pub unused: Vec<UnusedFileInfo>,
+    pub unreferenced: Vec<UnreferencedFileInfo>,
+}
+
+// Helper function to calculate SHA256 hash of a file
+fn calculate_file_hash(path: &Path) -> Result<String, std::io::Error> {
+    let mut file = fs::File::open(path)?;
+    let mut hasher = Sha256::new();
+    let mut buffer = [0u8; 8192];
+    
+    loop {
+        let n = file.read(&mut buffer)?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buffer[..n]);
+    }
+    
+    Ok(format!("{:x}", hasher.finalize()))
+}
+
+#[command]
+async fn find_duplicate_files(path: String, include_subdirectories: bool) -> Result<Vec<DuplicateFileGroup>, String> {
+    let mut hash_map: HashMap<String, Vec<String>> = HashMap::new();
+    let mut size_map: HashMap<String, u64> = HashMap::new();
+    
+    // Get all files
+    let files = if include_subdirectories {
+        WalkDir::new(&path)
+            .into_iter()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.path().is_file())
+            .map(|e| e.path().to_path_buf())
+            .collect::<Vec<_>>()
+    } else {
+        fs::read_dir(&path)
+            .map_err(|e| e.to_string())?
+            .filter_map(|res| res.ok())
+            .filter(|entry| entry.path().is_file())
+            .map(|e| e.path())
+            .collect::<Vec<_>>()
+    };
+    
+    // Calculate hashes for all files
+    for file_path in files {
+        // Skip hidden files
+        if let Some(name) = file_path.file_name() {
+            if name.to_string_lossy().starts_with('.') {
+                continue;
+            }
+        }
+        
+        match calculate_file_hash(&file_path) {
+            Ok(hash) => {
+                let path_str = file_path.to_string_lossy().to_string();
+                hash_map.entry(hash.clone()).or_insert_with(Vec::new).push(path_str);
+                
+                // Store file size
+                if let Ok(metadata) = fs::metadata(&file_path) {
+                    size_map.insert(hash, metadata.len());
+                }
+            }
+            Err(e) => {
+                eprintln!("Failed to hash file {:?}: {}", file_path, e);
+            }
+        }
+    }
+    
+    // Filter out unique files and create duplicate groups
+    let mut duplicates: Vec<DuplicateFileGroup> = hash_map
+        .into_iter()
+        .filter(|(_, files)| files.len() > 1)
+        .map(|(hash, files)| DuplicateFileGroup {
+            hash: hash.clone(),
+            size: size_map.get(&hash).copied().unwrap_or(0),
+            files,
+        })
+        .collect();
+    
+    // Sort by size (largest first)
+    duplicates.sort_by(|a, b| b.size.cmp(&a.size));
+    
+    Ok(duplicates)
+}
+
+#[command]
+async fn find_unused_files(path: String, include_subdirectories: bool, days_threshold: u64) -> Result<Vec<UnusedFileInfo>, String> {
+    let mut unused_files: Vec<UnusedFileInfo> = Vec::new();
+    let now = std::time::SystemTime::now();
+    
+    // Get all files
+    let files = if include_subdirectories {
+        WalkDir::new(&path)
+            .into_iter()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.path().is_file())
+            .map(|e| e.path().to_path_buf())
+            .collect::<Vec<_>>()
+    } else {
+        fs::read_dir(&path)
+            .map_err(|e| e.to_string())?
+            .filter_map(|res| res.ok())
+            .filter(|entry| entry.path().is_file())
+            .map(|e| e.path())
+            .collect::<Vec<_>>()
+    };
+    
+    for file_path in files {
+        // Skip hidden files
+        if let Some(name) = file_path.file_name() {
+            if name.to_string_lossy().starts_with('.') {
+                continue;
+            }
+        }
+        
+        if let Ok(metadata) = fs::metadata(&file_path) {
+            let size = metadata.len();
+            
+            // Try to get last accessed time
+            let (last_accessed, days_since_access) = metadata.accessed()
+                .ok()
+                .and_then(|accessed| {
+                    accessed.duration_since(std::time::UNIX_EPOCH).ok().map(|d| {
+                        let accessed_str = chrono::DateTime::<chrono::Utc>::from(
+                            std::time::UNIX_EPOCH + d
+                        ).format("%Y-%m-%d %H:%M:%S").to_string();
+                        
+                        let days = now.duration_since(accessed)
+                            .ok()
+                            .map(|d| d.as_secs() / 86400)
+                            .unwrap_or(0);
+                        
+                        (Some(accessed_str), Some(days))
+                    })
+                })
+                .unwrap_or((None, None));
+            
+            // Try to get last modified time
+            let last_modified = metadata.modified()
+                .ok()
+                .and_then(|modified| {
+                    modified.duration_since(std::time::UNIX_EPOCH).ok().map(|d| {
+                        chrono::DateTime::<chrono::Utc>::from(
+                            std::time::UNIX_EPOCH + d
+                        ).format("%Y-%m-%d %H:%M:%S").to_string()
+                    })
+                });
+            
+            // Check if file is unused based on threshold
+            if let Some(days) = days_since_access {
+                if days >= days_threshold {
+                    unused_files.push(UnusedFileInfo {
+                        path: file_path.to_string_lossy().to_string(),
+                        size,
+                        last_accessed,
+                        last_modified,
+                        days_since_access: Some(days),
+                    });
+                }
+            }
+        }
+    }
+    
+    // Sort by days since access (oldest first)
+    unused_files.sort_by(|a, b| {
+        b.days_since_access.unwrap_or(0).cmp(&a.days_since_access.unwrap_or(0))
+    });
+    
+    Ok(unused_files)
+}
+
+#[command]
+async fn find_unreferenced_files(path: String, include_subdirectories: bool) -> Result<Vec<UnreferencedFileInfo>, String> {
+    let mut all_files: Vec<std::path::PathBuf> = Vec::new();
+    let mut referenced_files: HashSet<String> = HashSet::new();
+    
+    // Get all files
+    let files = if include_subdirectories {
+        WalkDir::new(&path)
+            .into_iter()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.path().is_file())
+            .map(|e| e.path().to_path_buf())
+            .collect::<Vec<_>>()
+    } else {
+        fs::read_dir(&path)
+            .map_err(|e| e.to_string())?
+            .filter_map(|res| res.ok())
+            .filter(|entry| entry.path().is_file())
+            .map(|e| e.path())
+            .collect::<Vec<_>>()
+    };
+    
+    all_files.extend(files);
+    
+    // Build a regex to find file references (flexible pattern)
+    // Matches: ./file, ../file, /path/to/file, file.ext, "file", 'file'
+    let file_ref_pattern = Regex::new(r#"(?:^|[\s"'`(])(\.{0,2}/?[\w\-./\\]+\.[\w]+)(?:[\s"'`)]|$)"#)
+        .map_err(|e| format!("Failed to compile regex: {}", e))?;
+    
+    // Scan text files for references to other files
+    for file_path in &all_files {
+        // Skip hidden files
+        if let Some(name) = file_path.file_name() {
+            if name.to_string_lossy().starts_with('.') {
+                continue;
+            }
+        }
+        
+        // Only scan text-based files (common code, config, and doc files)
+        if let Some(ext) = file_path.extension() {
+            let ext_str = ext.to_string_lossy().to_lowercase();
+            let text_extensions = vec![
+                "rs", "js", "ts", "jsx", "tsx", "py", "java", "c", "cpp", "h", "hpp",
+                "cs", "go", "rb", "php", "swift", "kt", "scala", "sh", "bash",
+                "html", "css", "scss", "sass", "less", "xml", "json", "yaml", "yml",
+                "toml", "ini", "conf", "config", "md", "txt", "rst", "tex",
+            ];
+            
+            if text_extensions.contains(&ext_str.as_str()) {
+                // Read file content
+                if let Ok(content) = fs::read_to_string(file_path) {
+                    // Find all file references in the content
+                    for cap in file_ref_pattern.captures_iter(&content) {
+                        if let Some(referenced) = cap.get(1) {
+                            let ref_str = referenced.as_str().to_string();
+                            
+                            // Try to resolve the reference relative to the current file's directory
+                            if let Some(parent) = file_path.parent() {
+                                let resolved = parent.join(&ref_str);
+                                if resolved.exists() {
+                                    referenced_files.insert(resolved.to_string_lossy().to_string());
+                                }
+                            }
+                            
+                            // Also try relative to the base path
+                            let resolved = Path::new(&path).join(&ref_str);
+                            if resolved.exists() {
+                                referenced_files.insert(resolved.to_string_lossy().to_string());
+                            }
+                            
+                            // Try as an absolute path
+                            let resolved = Path::new(&ref_str);
+                            if resolved.exists() {
+                                referenced_files.insert(resolved.to_string_lossy().to_string());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    // Find files that are not referenced
+    let mut unreferenced: Vec<UnreferencedFileInfo> = Vec::new();
+    for file_path in &all_files {
+        // Skip hidden files
+        if let Some(name) = file_path.file_name() {
+            if name.to_string_lossy().starts_with('.') {
+                continue;
+            }
+        }
+        
+        let path_str = file_path.to_string_lossy().to_string();
+        
+        // Check if this file is referenced
+        if !referenced_files.contains(&path_str) {
+            if let Ok(metadata) = fs::metadata(file_path) {
+                unreferenced.push(UnreferencedFileInfo {
+                    path: path_str,
+                    size: metadata.len(),
+                    extension: file_path
+                        .extension()
+                        .map(|e| e.to_string_lossy().to_string())
+                        .unwrap_or_default(),
+                });
+            }
+        }
+    }
+    
+    // Sort by size (largest first)
+    unreferenced.sort_by(|a, b| b.size.cmp(&a.size));
+    
+    Ok(unreferenced)
+}
+
+#[command]
+async fn analyze_directory_files(
+    path: String, 
+    include_subdirectories: bool,
+    unused_days_threshold: u64,
+) -> Result<FileAnalysisResult, String> {
+    // Run all three analyses
+    let duplicates = find_duplicate_files(path.clone(), include_subdirectories).await?;
+    let unused = find_unused_files(path.clone(), include_subdirectories, unused_days_threshold).await?;
+    let unreferenced = find_unreferenced_files(path, include_subdirectories).await?;
+    
+    Ok(FileAnalysisResult {
+        duplicates,
+        unused,
+        unreferenced,
+    })
+}
+
 fn create_menu() -> Menu {
     let help_menu = Menu::new()
         .add_item(CustomMenuItem::new("show_help".to_string(), "File Organizer Help"))
@@ -887,7 +1220,11 @@ fn main() {
             download_llm_server,
             start_llm_server,
             stop_llm_server,
-            get_llm_server_info
+            get_llm_server_info,
+            find_duplicate_files,
+            find_unused_files,
+            find_unreferenced_files,
+            analyze_directory_files
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

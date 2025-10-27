@@ -3,7 +3,7 @@ import { classifyViaLLM, optimizeCategoriesViaLLM, LLMConfig, DEFAULT_CONFIGS, o
 import { invoke } from '@tauri-apps/api/tauri';
 import { listen } from '@tauri-apps/api/event';
 import { ScanState, ManagedLLMConfig } from './types';
-import { LLMConfigPanel, HelpDialog, AboutDialog } from './components';
+import { LLMConfigPanel, HelpDialog, AboutDialog, FileAnalysisPanel } from './components';
 import { debugLogger } from './debug-logger';
 
 function sanitizeFilename(name: string) {
@@ -135,6 +135,9 @@ export default function App() {
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [showOptimizationResult, setShowOptimizationResult] = useState(false);
   const optimizationCancelRef = useRef(false);
+  
+  // App mode: organize or analyze
+  const [appMode, setAppMode] = useState<'organize' | 'analyze'>('organize');
   
   // Sorting state
   const [sortBy, setSortBy] = useState<SortField>('source');
@@ -977,6 +980,22 @@ export default function App() {
           )}
           
           <div className="header-toggle-container">
+            <div className="mode-switcher">
+              <button 
+                className={`mode-button ${appMode === 'organize' ? 'active' : ''}`}
+                onClick={() => setAppMode('organize')}
+                title="Organize files with AI classification"
+              >
+                Organize
+              </button>
+              <button 
+                className={`mode-button ${appMode === 'analyze' ? 'active' : ''}`}
+                onClick={() => setAppMode('analyze')}
+                title="Find duplicates, unused, and unreferenced files"
+              >
+                Analyze
+              </button>
+            </div>
             <button 
               className="theme-toggle" 
               onClick={toggleSidebarCollapse}
@@ -987,22 +1006,24 @@ export default function App() {
             <button className="theme-toggle" onClick={toggleTheme} title={`Switch to ${theme === 'light' ? 'Dark' : 'Light'} Mode`}>
               {theme === 'light' ? '☀️' : '🌙'}
             </button>
-            <div className="header-scan-buttons">
-              <button 
-                onClick={scan} 
-                disabled={busy || !directory || scanState === 'scanning'}
-              >
-                {scanState === 'scanning' ? 'Scanning...' : scanState === 'stopped' ? 'Resume Scan' : 'Start Scan'}
-              </button>
-              
-              {scanState === 'scanning' && (
-                <button className="danger" onClick={stopScan} disabled={!busy}>Stop</button>
-              )}
-              
-              {(scanState === 'completed' || scanState === 'stopped') && (
-                <button className="secondary" onClick={resetScan}>New Scan</button>
-              )}
-            </div>
+            {appMode === 'organize' && (
+              <div className="header-scan-buttons">
+                <button 
+                  onClick={scan} 
+                  disabled={busy || !directory || scanState === 'scanning'}
+                >
+                  {scanState === 'scanning' ? 'Scanning...' : scanState === 'stopped' ? 'Resume Scan' : 'Start Scan'}
+                </button>
+                
+                {scanState === 'scanning' && (
+                  <button className="danger" onClick={stopScan} disabled={!busy}>Stop</button>
+                )}
+                
+                {(scanState === 'completed' || scanState === 'stopped') && (
+                  <button className="secondary" onClick={resetScan}>New Scan</button>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -1054,7 +1075,14 @@ export default function App() {
 
         {/* Main Content Area */}
         <main className="app-content">
-          {!!rows.length ? (
+          {appMode === 'analyze' ? (
+            <FileAnalysisPanel 
+              directory={directory} 
+              includeSubdirectories={includeSubdirectories}
+            />
+          ) : (
+            <>
+              {!!rows.length ? (
             <div className="content-section">
               <div className="content-header">
                 <h2>Review & Edit Proposals</h2>
@@ -1163,10 +1191,12 @@ export default function App() {
                 </table>
               </div>
             </div>
-          ) : (
-            <div className="content-empty">
-              <p>Configure a LLM provider, select a directory and start a scan to organize your files.</p>
-            </div>
+              ) : (
+                <div className="content-empty">
+                  <p>Configure a LLM provider, select a directory and start a scan to organize your files.</p>
+                </div>
+              )}
+            </>
           )}
         </main>
       </div>
