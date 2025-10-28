@@ -129,7 +129,7 @@ export default function App() {
     total: 0,
   });
   const [progress, setProgress] = useState({ current: 0, total: 0 });
-  const [statusExpanded, setStatusExpanded] = useState(true);
+  const [statusExpanded, setStatusExpanded] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [isOptimizing, setIsOptimizing] = useState(false);
@@ -376,6 +376,10 @@ export default function App() {
     if (savedState && savedState.rows.length > 0) {
       setSavedSessionAvailable(true);
       setShowSessionNotification(true);
+      debugLogger.info('APP_MOUNT', 'Found saved session on startup', { 
+        rowCount: savedState.rows.length,
+        minutesAgo: Math.round((Date.now() - savedState.timestamp) / 1000 / 60)
+      });
     }
   }, []);
 
@@ -1153,7 +1157,36 @@ export default function App() {
               )}
               
               {(scanState === 'completed' || scanState === 'stopped') && (
-                <button className="secondary" onClick={resetScan}>New Scan</button>
+                <>
+                  <button className="secondary" onClick={resetScan}>New Scan</button>
+                  <button 
+                    className="secondary" 
+                    onClick={() => {
+                      saveProcessedState();
+                      setEvents((prev: string[]) => [`Saved ${rows.length} processed files`, ...prev]);
+                    }}
+                    disabled={rows.length === 0}
+                    title="Save current processed files to restore later"
+                  >
+                    💾 Save Session
+                  </button>
+                </>
+              )}
+              
+              {scanState === 'idle' && savedSessionAvailable && (
+                <button 
+                  className="primary" 
+                  onClick={() => {
+                    const savedState = loadProcessedState();
+                    if (savedState) {
+                      restoreProcessedState(savedState);
+                      setSavedSessionAvailable(false);
+                    }
+                  }}
+                  title="Load previously saved session"
+                >
+                  📂 Load Session
+                </button>
               )}
             </div>
           </div>
