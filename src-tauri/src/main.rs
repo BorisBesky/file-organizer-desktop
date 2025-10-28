@@ -43,8 +43,179 @@ pub struct ManagedLLMConfig {
     pub env_vars: HashMap<String, String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ServerProcessInfo {
+    pid: u32,
+    config: ManagedLLMConfig,
+}
+
 // Global state for the managed LLM server process and its config
-type ManagedLLMState = Arc<Mutex<Option<(Child, ManagedLLMConfig)>>>;
+// Stores: Optional Child handle (None if orphaned), and ServerProcessInfo with PID and config
+type ManagedLLMState = Arc<Mutex<Option<(Option<Child>, ServerProcessInfo)>>>;
+
+// Helper functions for PID file management and process control
+
+fn get_pid_file_path(app_data_dir: &std::path::PathBuf) -> std::path::PathBuf {
+    app_data_dir.join("llm-server").join("server.pid")
+}
+
+fn write_pid_file(app_data_dir: &std::path::PathBuf, pid: u32, config: &ManagedLLMConfig) -> Result<(), String> {
+    let pid_file = get_pid_file_path(app_data_dir);
+    let pid_data = serde_json::json!({
+        "pid": pid,
+        "port": config.port,
+        "host": config.host,
+        "started_at": std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs()
+    });
+    
+    fs::write(&pid_file, pid_data.to_string())
+        .map_err(|e| format!("Failed to write PID file: {}", e))?;
+    
+    eprintln!("Wrote PID {} to file: {}", pid, pid_file.to_string_lossy());
+    Ok(())
+}
+
+fn read_pid_file(app_data_dir: &std::path::PathBuf) -> Option<(u32, u16, String)> {
+    let pid_file = get_pid_file_path(app_data_dir);
+    if !pid_file.exists() {
+        return None;
+    }
+    
+    let pid_data = fs::read_to_string(&pid_file).ok()?;
+    let pid_json: serde_json::Value = serde_json::from_str(&pid_data).ok()?;
+    
+    let pid = pid_json["pid"].as_u64()? as u32;
+    let port = pid_json["port"].as_u64()? as u16;
+    let host = pid_json["host"].as_str()?.to_string();
+    
+    Some((pid, port, host))
+}
+
+fn remove_pid_file(app_data_dir: &std::path::PathBuf) {
+    let pid_file = get_pid_file_path(app_data_dir);
+    if pid_file.exists() {
+        let _ = fs::remove_file(&pid_file);
+        eprintln!("Removed PID file: {}", pid_file.to_string_lossy());
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn is_process_running(pid: u32) -> bool {
+    let output = std::process::Command::new("tasklist")
+        .args(&["/FI", &format!("PID eq {}", pid), "/NH"])
+        .output();
+    
+    if let Ok(output) = output {
+        let output_str = String::from_utf8_lossy(&output.stdout);
+        output_str.contains(&pid.to_string())
+    } else {
+        false
+    }
+}
+
+#[cfg(unix)]
+fn is_process_running(pid: u32) -> bool {
+    // Use kill -0 to check if process exists without killing it
+    std::process::Command::new("kill")
+        .args(&["-0", &pid.to_string()])
+        .output()
+        .map(|output| output.status.success())
+        .unwrap_or(false)
+}
+
+#[cfg(target_os = "windows")]
+fn kill_process_by_pid(pid: u32) -> Result<(), String> {
+    eprintln!("Killing process with PID: {}", pid);
+    let output = std::process::Command::new("taskkill")
+        .args(&["/F", "/T", "/PID", &pid.to_string()])
+        .output()
+        .map_err(|e| format!("Failed to execute taskkill: {}", e))?;
+    
+    if output.status.success() {
+        eprintln!("Successfully killed process {}", pid);
+        Ok(())
+    } else {
+        Err(format!("Failed to kill process: {}", String::from_utf8_lossy(&output.stderr)))
+    }
+}
+
+#[cfg(unix)]
+fn kill_process_by_pid(pid: u32) -> Result<(), String> {
+    eprintln!("Killing process with PID: {}", pid);
+    let output = std::process::Command::new("kill")
+        .args(&["-9", &pid.to_string()])
+        .output()
+        .map_err(|e| format!("Failed to execute kill: {}", e))?;
+    
+    if output.status.success() {
+        eprintln!("Successfully killed process {}", pid);
+        Ok(())
+    } else {
+        Err(format!("Failed to kill process: {}", String::from_utf8_lossy(&output.stderr)))
+    }
+}
+
+async fn try_reconnect_orphaned_server(
+    app_data_dir: &std::path::PathBuf,
+    state: &ManagedLLMState
+) -> Result<(), String> {
+    if let Some((pid, port, host)) = read_pid_file(app_data_dir) {
+        eprintln!("Found PID file: PID={}, host={}, port={}", pid, host, port);
+        
+        // Check if process is still running
+        if !is_process_running(pid) {
+            eprintln!("Process {} is not running, cleaning up PID file", pid);
+            remove_pid_file(app_data_dir);
+            return Ok(());
+        }
+        
+        // Verify it's actually our server by checking if it responds
+        let client = reqwest::Client::new();
+        let test_url = format!("http://{}:{}/v1/models", host, port);
+        
+        eprintln!("Verifying orphaned server at: {}", test_url);
+        match client.get(&test_url)
+            .timeout(std::time::Duration::from_secs(3))
+            .send()
+            .await 
+        {
+            Ok(response) if response.status().is_success() => {
+                eprintln!("Orphaned server is responsive, reconnecting...");
+                
+                // Reconnect by storing process info without Child handle
+                let config = ManagedLLMConfig {
+                    port,
+                    host,
+                    model: None,
+                    model_path: None,
+                    log_level: "info".to_string(),
+                    env_vars: HashMap::new(),
+                };
+                
+                let process_info = ServerProcessInfo {
+                    pid,
+                    config,
+                };
+                
+                let mut state_guard = state.lock().unwrap();
+                *state_guard = Some((None, process_info)); // None = orphaned process
+                
+                eprintln!("Successfully reconnected to orphaned server");
+                Ok(())
+            }
+            _ => {
+                eprintln!("Process exists but server not responding, cleaning up");
+                remove_pid_file(app_data_dir);
+                Ok(())
+            }
+        }
+    } else {
+        Ok(()) // No PID file found
+    }
+}
 
 #[command]
 async fn read_directory(path: String, include_subdirectories: bool) -> Result<Vec<String>, String> {
@@ -441,8 +612,8 @@ async fn get_llm_server_status(app: AppHandle, state: State<'_, ManagedLLMState>
     // Get the host and port from the stored config, or use defaults
     let (host, port) = {
         let state_guard = state.lock().unwrap();
-        if let Some((_, config)) = state_guard.as_ref() {
-            (config.host.clone(), config.port)
+        if let Some((_, process_info)) = state_guard.as_ref() {
+            (process_info.config.host.clone(), process_info.config.port)
         } else {
             ("127.0.0.1".to_string(), 8000)
         }
@@ -632,7 +803,7 @@ async fn start_llm_server(
     eprintln!("Received config for starting server: {:?}", config);
     
     // Stop any existing server first
-    let _ = stop_llm_server(state.clone()).await;
+    let _ = stop_llm_server(app.clone(), state.clone()).await;
 
     let app_data_dir = app.path_resolver()
         .app_data_dir()
@@ -697,9 +868,19 @@ async fn start_llm_server(
 
     // Store the process handle and config
     let pid = child.id();
+    
+    // Write PID file for orphan detection
+    write_pid_file(&app_data_dir, pid, &config)?;
+    
+    // Create process info
+    let process_info = ServerProcessInfo {
+        pid,
+        config: config.clone(),
+    };
+    
     {
         let mut state_guard = state.lock().unwrap();
-        *state_guard = Some((child, config.clone()));
+        *state_guard = Some((Some(child), process_info));
         eprintln!("Stored server process with PID {} in state", pid);
     }
 
@@ -728,41 +909,59 @@ async fn start_llm_server(
 }
 
 #[command]
-async fn stop_llm_server(state: State<'_, ManagedLLMState>) -> Result<String, String> {
+async fn stop_llm_server(app: AppHandle, state: State<'_, ManagedLLMState>) -> Result<String, String> {
     eprintln!("Attempting to stop LLM server...");
+    
+    let app_data_dir = app.path_resolver()
+        .app_data_dir()
+        .ok_or("Could not get app data directory")?;
     
     let mut state_guard = state.lock().unwrap();
     eprintln!("Got lock on state");
     
-    let has_child = state_guard.is_some();
-    eprintln!("State has child process: {}", has_child);
+    let has_process = state_guard.is_some();
+    eprintln!("State has process: {}", has_process);
     
-    if let Some((mut child, _config)) = state_guard.take() {
-        let pid = child.id();
+    if let Some((child_opt, process_info)) = state_guard.take() {
+        let pid = process_info.pid;
         eprintln!("Found server process with PID: {}", pid);
         
-        match child.kill() {
-            Ok(_) => {
-                eprintln!("Kill signal sent to PID: {}", pid);
-                let _ = child.wait(); // Wait for process to actually terminate
-                eprintln!("Server process terminated");
-                
-                // On Windows, also kill the process tree using taskkill
-                #[cfg(target_os = "windows")]
-                {
-                    let _ = std::process::Command::new("taskkill")
-                        .args(&["/F", "/T", "/PID", &pid.to_string()])
-                        .output();
-                    eprintln!("Sent taskkill command to terminate process tree");
+        // Try to kill via Child handle first (if we have it)
+        let result = if let Some(mut child) = child_opt {
+            eprintln!("Killing via Child handle");
+            match child.kill() {
+                Ok(_) => {
+                    eprintln!("Kill signal sent to PID: {}", pid);
+                    let _ = child.wait(); // Wait for process to actually terminate
+                    eprintln!("Server process terminated");
+                    
+                    // On Windows, also kill the process tree using taskkill
+                    #[cfg(target_os = "windows")]
+                    {
+                        let _ = std::process::Command::new("taskkill")
+                            .args(&["/F", "/T", "/PID", &pid.to_string()])
+                            .output();
+                        eprintln!("Sent taskkill command to terminate process tree");
+                    }
+                    
+                    Ok("Server stopped".to_string())
                 }
-                
-                Ok("Server stopped".to_string())
+                Err(e) => {
+                    eprintln!("Failed to kill server process via Child handle: {}", e);
+                    Err(format!("Failed to stop server: {}", e))
+                }
             }
-            Err(e) => {
-                eprintln!("Failed to kill server process: {}", e);
-                Err(format!("Failed to stop server: {}", e))
-            }
-        }
+        } else {
+            // Orphaned process - kill by PID
+            eprintln!("No Child handle, killing orphaned process by PID");
+            kill_process_by_pid(pid)?;
+            Ok("Orphaned server stopped".to_string())
+        };
+        
+        // Clean up PID file
+        remove_pid_file(&app_data_dir);
+        
+        result
     } else {
         eprintln!("No server process found in state");
         Ok("Server was not running".to_string())
@@ -842,24 +1041,53 @@ fn main() {
     let menu = create_menu();
     
     // Create the managed state for the LLM server
-    let llm_state = Arc::new(Mutex::new(None::<(Child, ManagedLLMConfig)>)) as ManagedLLMState;
+    let llm_state = Arc::new(Mutex::new(None::<(Option<Child>, ServerProcessInfo)>)) as ManagedLLMState;
+    
+    // Clone for the setup closure
+    let llm_state_setup = llm_state.clone();
+    // Clone for the window event closure
+    let llm_state_window = llm_state.clone();
     
     tauri::Builder::default()
         .menu(menu)
         .on_menu_event(handle_menu_event)
-        .manage(llm_state.clone())
+        .manage(llm_state)
+        .setup(move |app| {
+            // Try to reconnect to orphaned server on startup
+            let app_handle = app.handle();
+            let state = llm_state_setup.clone();
+            
+            tauri::async_runtime::spawn(async move {
+                if let Some(app_data_dir) = app_handle.path_resolver().app_data_dir() {
+                    eprintln!("Checking for orphaned LLM server processes...");
+                    if let Err(e) = try_reconnect_orphaned_server(&app_data_dir, &state).await {
+                        eprintln!("Failed to reconnect to orphaned server: {}", e);
+                    }
+                }
+            });
+            
+            Ok(())
+        })
         .on_window_event(move |event| {
             if let tauri::WindowEvent::Destroyed = event.event() {
                 eprintln!("Window closing, shutting down LLM server if running...");
                 
+                // Get app data dir for PID file cleanup
+                let app_data_dir = event.window().app_handle().path_resolver().app_data_dir();
+                
                 // Stop the LLM server
-                let mut state_guard = llm_state.lock().unwrap();
-                if let Some((mut child, _config)) = state_guard.take() {
-                    let pid = child.id();
+                let mut state_guard = llm_state_window.lock().unwrap();
+                if let Some((child_opt, process_info)) = state_guard.take() {
+                    let pid = process_info.pid;
                     eprintln!("Stopping LLM server with PID: {}", pid);
                     
-                    let _ = child.kill();
-                    let _ = child.wait();
+                    // Kill via Child handle if available, otherwise by PID
+                    if let Some(mut child) = child_opt {
+                        let _ = child.kill();
+                        let _ = child.wait();
+                    } else {
+                        let _ = kill_process_by_pid(pid);
+                    }
                     
                     // On Windows, also kill the process tree
                     #[cfg(target_os = "windows")]
@@ -867,6 +1095,11 @@ fn main() {
                         let _ = std::process::Command::new("taskkill")
                             .args(&["/F", "/T", "/PID", &pid.to_string()])
                             .output();
+                    }
+                    
+                    // Clean up PID file
+                    if let Some(app_data_dir) = app_data_dir {
+                        remove_pid_file(&app_data_dir);
                     }
                     
                     eprintln!("LLM server stopped on app exit");
