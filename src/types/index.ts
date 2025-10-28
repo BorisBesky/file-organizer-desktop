@@ -48,6 +48,22 @@ export interface ManagedLLMConfig {
   model?: string;
   model_path?: string;
   log_level: string;
-  // Environment variables for the server
   env_vars: Record<string, string>;
+}
+
+// Saved processed files state for persistence
+export interface SavedProcessedState {
+  directory: string;
+  includeSubdirectories: boolean;
+  rows: Row[];
+  processedFiles: any[];
+  allFiles: string[];
+  currentFileIndex: number;
+  used: string[];
+  scanState: ScanState;
+  progress: {
+    current: number;
+    total: number;
+  };
+  timestamp: number;
 }

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { classifyViaLLM, optimizeCategoriesViaLLM, LLMConfig, DEFAULT_CONFIGS, openFile, FileContent } from './api';
 import { invoke } from '@tauri-apps/api/tauri';
 import { listen } from '@tauri-apps/api/event';
-import { ScanState, ManagedLLMConfig } from './types';
+import { ScanState, ManagedLLMConfig, SavedProcessedState } from './types';
 import { LLMConfigPanel, HelpDialog, AboutDialog } from './components';
 import { debugLogger } from './debug-logger';
 
@@ -135,6 +135,10 @@ export default function App() {
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [showOptimizationResult, setShowOptimizationResult] = useState(false);
   const optimizationCancelRef = useRef(false);
+  
+  // Saved session state
+  const [savedSessionAvailable, setSavedSessionAvailable] = useState(false);
+  const [showSessionNotification, setShowSessionNotification] = useState(false);
   
   // Sorting state
   const [sortBy, setSortBy] = useState<SortField>('source');
@@ -366,8 +370,108 @@ export default function App() {
     };
   }, []);
 
+  // Check for saved session on mount
+  useEffect(() => {
+    const savedState = loadProcessedState();
+    if (savedState && savedState.rows.length > 0) {
+      setSavedSessionAvailable(true);
+      setShowSessionNotification(true);
+    }
+  }, []);
+
   const pickDirectory = () => {
     invoke('pick_directory');
+  };
+
+  // Save processed files state to localStorage
+  const saveProcessedState = () => {
+    if (!directory || rows.length === 0) {
+      return; // Nothing to save
+    }
+
+    try {
+      const state: SavedProcessedState = {
+        directory,
+        includeSubdirectories,
+        rows,
+        processedFiles: scanControlRef.current.processedFiles,
+        allFiles: scanControlRef.current.allFiles,
+        currentFileIndex: scanControlRef.current.currentFileIndex,
+        used: Array.from(scanControlRef.current.used),
+        scanState,
+        progress,
+        timestamp: Date.now(),
+      };
+
+      localStorage.setItem('processedFilesState', JSON.stringify(state));
+      debugLogger.info('APP_STATE', 'Saved processed files state', { 
+        rowCount: rows.length, 
+        directory 
+      });
+    } catch (error) {
+      debugLogger.error('APP_STATE', 'Failed to save processed files state', { error });
+    }
+  };
+
+  // Load processed files state from localStorage
+  const loadProcessedState = (): SavedProcessedState | null => {
+    try {
+      const saved = localStorage.getItem('processedFilesState');
+      if (saved) {
+        const state: SavedProcessedState = JSON.parse(saved);
+        debugLogger.info('APP_STATE', 'Found saved processed files state', {
+          rowCount: state.rows.length,
+          directory: state.directory,
+          age: Math.round((Date.now() - state.timestamp) / 1000 / 60) + ' minutes ago'
+        });
+        return state;
+      }
+    } catch (error) {
+      debugLogger.error('APP_STATE', 'Failed to load processed files state', { error });
+    }
+    return null;
+  };
+
+  // Restore processed files state
+  const restoreProcessedState = (state: SavedProcessedState) => {
+    try {
+      setDirectory(state.directory);
+      setIncludeSubdirectories(state.includeSubdirectories);
+      setRows(state.rows);
+      setProgress(state.progress);
+      setScanState(state.scanState === 'scanning' ? 'stopped' : state.scanState);
+      
+      scanControlRef.current = {
+        shouldStop: false,
+        currentFileIndex: state.currentFileIndex,
+        processedFiles: state.processedFiles,
+        allFiles: state.allFiles,
+        used: new Set(state.used),
+      };
+
+      const minutesAgo = Math.round((Date.now() - state.timestamp) / 1000 / 60);
+      setEvents((prev: string[]) => [
+        `Loaded ${state.rows.length} previously processed files from ${minutesAgo} minute(s) ago`,
+        ...prev
+      ]);
+
+      debugLogger.info('APP_STATE', 'Restored processed files state', { 
+        rowCount: state.rows.length 
+      });
+    } catch (error) {
+      debugLogger.error('APP_STATE', 'Failed to restore processed files state', { error });
+      setEvents((prev: string[]) => ['Failed to restore previous session', ...prev]);
+    }
+  };
+
+  // Clear saved processed state
+  const clearProcessedState = () => {
+    try {
+      localStorage.removeItem('processedFilesState');
+      debugLogger.info('APP_STATE', 'Cleared saved processed files state', {});
+    } catch (error) {
+      debugLogger.error('APP_STATE', 'Failed to clear processed files state', { error });
+    }
   };
 
   const stopScan = () => {
@@ -405,6 +509,8 @@ export default function App() {
   const finalizeScan = async () => {
     setProgress({ current: scanControlRef.current.currentFileIndex, total: scanControlRef.current.allFiles.length });
     setBusy(false);
+    // Save the processed state when scan completes or stops
+    saveProcessedState();
     // Don't change scanState here - it should already be set to 'stopped' or 'completed'
   };
 
@@ -560,6 +666,9 @@ export default function App() {
       allFiles: [],
       used: new Set<string>(),
     };
+
+    // Clear saved state when starting a new scan
+    clearProcessedState();
 
     setBusy(true);
     setScanState('scanning');
@@ -756,6 +865,7 @@ export default function App() {
     setBusy(false);
     setOptimizedCategories({ categories: new Set(), count: 0, total: 0 });
     setShowOptimizationResult(false);
+    clearProcessedState(); // Clear saved state when resetting
     scanControlRef.current = {
       shouldStop: false,
       currentFileIndex: 0,
@@ -884,6 +994,49 @@ export default function App() {
       {/* Progress/Status Header */}
       <div className="app-header">
         <div className="header-content">
+          {/* Saved Session Notification */}
+          {showSessionNotification && savedSessionAvailable && scanState === 'idle' && (
+            <div className="header-progress">
+              <div className="progress-label">
+                Previous Session Available
+              </div>
+              <div className="progress-text">
+                You have a previously saved session. Would you like to restore it?
+                <div style={{ marginTop: '8px', display: 'flex', gap: '8px' }}>
+                  <button 
+                    className="primary"
+                    onClick={() => {
+                      const savedState = loadProcessedState();
+                      if (savedState) {
+                        restoreProcessedState(savedState);
+                      }
+                      setShowSessionNotification(false);
+                    }}
+                  >
+                    Load Previous Session
+                  </button>
+                  <button 
+                    className="secondary"
+                    onClick={() => {
+                      clearProcessedState();
+                      setSavedSessionAvailable(false);
+                      setShowSessionNotification(false);
+                      setEvents((prev: string[]) => ['Previous session cleared', ...prev]);
+                    }}
+                  >
+                    Start Fresh
+                  </button>
+                  <button 
+                    className="secondary"
+                    onClick={() => setShowSessionNotification(false)}
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {(busy || scanState !== 'idle') && progress.total > 0 && (
             <div className="header-progress">
               <div className="progress-label">
