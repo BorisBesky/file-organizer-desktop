@@ -101,9 +101,9 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled, pro
       setManagedLLMStatus(status);
       
       // Show download dialog if not downloaded
-      // if (status.status === 'not_downloaded') {
-      //   setShowDownloadDialog(true);
-      // }
+      if (status.status === 'not_downloaded') {
+        setShowDownloadDialog(true);
+      }
     } catch (error) {
       debugLogger.error('MANAGED_LLM', 'Failed to load managed LLM status', { error });
     }

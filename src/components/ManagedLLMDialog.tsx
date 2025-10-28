@@ -87,7 +87,7 @@ export default function ManagedLLMDialog({ isOpen, onClose, onDownloadComplete }
               </select>
             </div>
             <div className="info-row">
-              <strong>Size:</strong> ~50-100 MB (varies by platform)
+              <strong>Size:</strong> {navigator.userAgent.includes('Win') ? '~ 10 MB' : navigator.userAgent.includes('Mac') ? '~ 17 MB' : '~ 90 MB'}
             </div>
           </div>
 
