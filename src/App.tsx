@@ -129,7 +129,7 @@ export default function App() {
     total: 0,
   });
   const [progress, setProgress] = useState({ current: 0, total: 0 });
-  const [statusExpanded, setStatusExpanded] = useState(true);
+  const [statusExpanded, setStatusExpanded] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [isOptimizing, setIsOptimizing] = useState(false);
@@ -259,6 +259,32 @@ export default function App() {
     }
   }, [managedLLMConfig]);
 
+  // Auto-save processed state when scan completes or stops
+  useEffect(() => {
+    if ((scanState === 'completed' || scanState === 'stopped') && rows.length > 0) {
+      saveProcessedState();
+    }
+  }, [scanState, rows]);
+
+  // Auto-save on app exit/unmount using beforeunload event
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      if (rows.length > 0 && directory) {
+        saveProcessedState();
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      // Also save on component unmount
+      if (rows.length > 0 && directory) {
+        saveProcessedState();
+      }
+    };
+  }, [rows, directory, scanState, progress, includeSubdirectories]);
+
   // Migrate old config format on first load
   useEffect(() => {
     try {
@@ -378,6 +404,17 @@ export default function App() {
       setShowSessionNotification(true);
     }
   }, []);
+
+    // Auto-restore when user picks the same directory as the saved session
+  useEffect(() => {
+    if (!directory || rows.length > 0) return; // avoid overwriting active state
+    const savedState = loadProcessedState();
+    if (savedState && savedState.rows.length > 0 && savedState.directory === directory) {
+      restoreProcessedState(savedState);
+      setSavedSessionAvailable(false);
+      setShowSessionNotification(false);
+    }
+  }, [directory]); // runs when directory changes
 
   const pickDirectory = () => {
     invoke('pick_directory');
@@ -994,49 +1031,6 @@ export default function App() {
       {/* Progress/Status Header */}
       <div className="app-header">
         <div className="header-content">
-          {/* Saved Session Notification */}
-          {showSessionNotification && savedSessionAvailable && scanState === 'idle' && (
-            <div className="header-progress">
-              <div className="progress-label">
-                Previous Session Available
-              </div>
-              <div className="progress-text">
-                You have a previously saved session. Would you like to restore it?
-                <div style={{ marginTop: '8px', display: 'flex', gap: '8px' }}>
-                  <button 
-                    className="primary"
-                    onClick={() => {
-                      const savedState = loadProcessedState();
-                      if (savedState) {
-                        restoreProcessedState(savedState);
-                      }
-                      setShowSessionNotification(false);
-                    }}
-                  >
-                    Load Previous Session
-                  </button>
-                  <button 
-                    className="secondary"
-                    onClick={() => {
-                      clearProcessedState();
-                      setSavedSessionAvailable(false);
-                      setShowSessionNotification(false);
-                      setEvents((prev: string[]) => ['Previous session cleared', ...prev]);
-                    }}
-                  >
-                    Start Fresh
-                  </button>
-                  <button 
-                    className="secondary"
-                    onClick={() => setShowSessionNotification(false)}
-                  >
-                    Dismiss
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
           {(busy || scanState !== 'idle') && progress.total > 0 && (
             <div className="header-progress">
               <div className="progress-label">
