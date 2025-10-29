@@ -264,6 +264,10 @@ export default function App() {
     if ((scanState === 'completed' || scanState === 'stopped') && rows.length > 0) {
       saveProcessedState();
     }
+    // Clear saved state when scan is reset to idle with no rows
+    if (scanState === 'idle' && rows.length === 0) {
+      clearProcessedState();
+    }
   }, [scanState, rows]);
 
   // Auto-save on app exit/unmount using beforeunload event
@@ -706,6 +710,8 @@ export default function App() {
 
     // Clear saved state when starting a new scan
     clearProcessedState();
+    setSavedSessionAvailable(false);
+    setShowSessionNotification(false);
 
     setBusy(true);
     setScanState('scanning');
@@ -903,6 +909,8 @@ export default function App() {
     setOptimizedCategories({ categories: new Set(), count: 0, total: 0 });
     setShowOptimizationResult(false);
     clearProcessedState(); // Clear saved state when resetting
+    setSavedSessionAvailable(false);
+    setShowSessionNotification(false);
     scanControlRef.current = {
       shouldStop: false,
       currentFileIndex: 0,
