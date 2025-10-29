@@ -3,6 +3,7 @@ import { LLMConfig, LLMProviderType, DEFAULT_CONFIGS, listOllamaModels, listLMSt
 import { ManagedLLMServerInfo, ManagedLLMConfig } from '../types';
 import ManagedLLMDialog from './ManagedLLMDialog';
 import { debugLogger } from '../debug-logger';
+import { platform } from '@tauri-apps/api/os';
 
 interface LLMConfigPanelProps {
   config: LLMConfig;
@@ -83,12 +84,13 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled, pro
   }, [config.customHeaders]);
 
   const currentProviderInfo = PROVIDER_INFO[config.provider];
+  const defaultModel = (navigator.userAgent.includes('Mac') ? 'mlx-community/Phi-3.5-mini-instruct-4bit' : 'MaziyarPanahi/gemma-3-1b-it-GGUF');
 
   // Initialize managed LLM config if not provided
   const defaultManagedConfig: ManagedLLMConfig = {
     port: 8000,
     host: '127.0.0.1',
-    model: 'MaziyarPanahi/gemma-3-1b-it-GGUF',
+    model: defaultModel,
     log_level: 'info',
     env_vars: {}
   };
@@ -591,7 +593,7 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled, pro
                         onChange={(e) => {updateManagedConfig({ model: e.target.value || undefined });
                           onChange({ ...config, model: e.target.value || '' });
                         }}
-                        placeholder="e.g., MaziyarPanahi/gemma-3-1b-it-GGUF"
+                        placeholder={`e.g., ${defaultModel}`}
                         disabled={disabled}
                       />
                     </label>
