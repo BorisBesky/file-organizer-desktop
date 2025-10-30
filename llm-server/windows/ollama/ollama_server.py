@@ -10,6 +10,13 @@ from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 import uvicorn
 
+# Fix for PyInstaller with console=False: ensure stdout/stderr are not None
+# This prevents uvicorn logging from failing when checking isatty()
+if sys.stdout is None:
+    sys.stdout = open(os.devnull, 'w')
+if sys.stderr is None:
+    sys.stderr = open(os.devnull, 'w')
+
 try:
     from version import __version__, __build_date__
 except ImportError:
@@ -25,6 +32,7 @@ default_filename = "gemma-3-1b-it.Q8_0.gguf"
 default_port = 8000
 default_log_level = "info"
 default_host = "127.0.0.1"
+default_n_gpu_layers = -1
 
 # Parse command-line arguments
 def parse_args():
@@ -39,12 +47,14 @@ Environment variables (overridden by command-line arguments):
   SERVER_PORT         Port to listen on (default: %(default_port)s)
   SERVER_LOG_LEVEL    Log level (default: %(default_log_level)s)
   SERVER_HOST         Host to listen on (default: %(default_host)s)
+  SERVER_N_GPU_LAYERS Number of GPU layers to use (default: %(default_n_gpu_layers)s)
         """ % {
             'default_model': default_model_id,
             'default_filename': default_filename,
             'default_port': default_port,
             'default_log_level': default_log_level,
-            'default_host': default_host
+            'default_host': default_host,
+            'default_n_gpu_layers': default_n_gpu_layers
         }
     )
     
@@ -91,6 +101,12 @@ Environment variables (overridden by command-line arguments):
         help=f'Logging level (default: {default_log_level})'
     )
     
+    parser.add_argument(
+        '--n-gpu-layers',
+        type=int,
+        help=f'Number of GPU layers to use (default: {default_n_gpu_layers})'
+    )
+    
     return parser.parse_args()
 
 # Initialize with command-line args, environment variables, or defaults
@@ -111,12 +127,14 @@ else:
 port_number = args.port if args.port is not None else int(os.environ.get('SERVER_PORT', default_port))
 log_level = args.log_level or os.environ.get('SERVER_LOG_LEVEL', default_log_level)
 hostname = args.host or os.environ.get('SERVER_HOST', default_host)
+n_gpu_layers = args.n_gpu_layers or int(os.environ.get('SERVER_N_GPU_LAYERS', default_n_gpu_layers))
 
 # Initialize the Llama model once
 llama = Llama(
     model_path=model_path,
     n_ctx=2048,
     n_batch=512,
+    n_gpu_layers=n_gpu_layers,
     verbose=True,
 )
 

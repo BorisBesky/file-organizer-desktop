@@ -35,7 +35,7 @@ exe = EXE(
     [],
     exclude_binaries=True,
     name='ollama_server',
-    debug=False,
+    debug=True,
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
