@@ -308,6 +308,56 @@ body {
   color: var(--text-secondary);
 }
 
+.directories-list {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.directory-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.directory-item .directory-display {
+  flex: 1;
+  margin-top: 0;
+}
+
+.directory-remove-btn {
+  background: var(--accent-red);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  padding: 0;
+  flex-shrink: 0;
+  transition: background-color 0.2s ease;
+}
+
+.directory-remove-btn:hover:not(:disabled) {
+  background: var(--danger-hover, #e52d22);
+}
+
+.directory-remove-btn:active:not(:disabled) {
+  background: var(--danger-active, #cc2619);
+}
+
+.directory-remove-btn:disabled {
+  background: var(--button-disabled-bg);
+  color: var(--button-disabled-text);
+  cursor: not-allowed;
+}
+
 .content-section {
   display: flex;
   flex-direction: column;
