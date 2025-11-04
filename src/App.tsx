@@ -262,10 +262,15 @@ export default function App() {
   // Auto-save processed state when scan completes or stops
   useEffect(() => {
     if ((scanState === 'completed' || scanState === 'stopped') && rows.length > 0) {
+      debugLogger.info('APP_STATE', 'Auto-saving state after scan completed/stopped', {
+        scanState,
+        rowCount: rows.length,
+      });
       saveProcessedState();
     }
     // Clear saved state when scan is reset to idle with no rows
     if (scanState === 'idle' && rows.length === 0) {
+      debugLogger.info('APP_STATE', 'Clearing saved state (idle with no rows)', {});
       clearProcessedState();
     }
   }, [scanState, rows]);
@@ -273,6 +278,11 @@ export default function App() {
   // Auto-save on app exit/unmount using beforeunload event
   useEffect(() => {
     const handleBeforeUnload = () => {
+      debugLogger.info('APP_EXIT', 'beforeunload triggered, saving state', {
+        rowCount: rows.length,
+        directoryCount: directories.length,
+        scanState,
+      });
       if (rows.length > 0 && directories.length > 0) {
         saveProcessedState();
       }
@@ -283,6 +293,11 @@ export default function App() {
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
       // Also save on component unmount
+      debugLogger.info('APP_EXIT', 'Component unmounting, saving state', {
+        rowCount: rows.length,
+        directoryCount: directories.length,
+        scanState,
+      });
       if (rows.length > 0 && directories.length > 0) {
         saveProcessedState();
       }
@@ -316,7 +331,7 @@ export default function App() {
     }
   }, []); // Run only once on mount
 
-  // Add a global function to clear config for debugging
+  // Add global functions for debugging
   useEffect(() => {
     (window as any).clearManagedLLMConfig = () => {
       localStorage.removeItem('managedLLMConfig');
@@ -324,6 +339,32 @@ export default function App() {
     };
     (window as any).getManagedLLMConfig = () => {
       return JSON.parse(localStorage.getItem('managedLLMConfig') || '{}');
+    };
+    // Debug functions for processed state
+    (window as any).getProcessedState = () => {
+      const saved = localStorage.getItem('processedFilesState');
+      if (saved) {
+        const state = JSON.parse(saved);
+        console.log('Processed State:', {
+          rowCount: state.rows?.length || 0,
+          directories: state.directories,
+          scanState: state.scanState,
+          timestamp: new Date(state.timestamp).toLocaleString(),
+          minutesAgo: Math.round((Date.now() - state.timestamp) / 1000 / 60),
+        });
+        return state;
+      } else {
+        console.log('No processed state found in localStorage');
+        return null;
+      }
+    };
+    (window as any).clearProcessedState = () => {
+      localStorage.removeItem('processedFilesState');
+      console.log('Processed state cleared');
+    };
+    (window as any).saveCurrentState = () => {
+      saveProcessedState();
+      console.log('Current state saved manually');
     };
   }, []);
 
@@ -393,30 +434,25 @@ export default function App() {
     };
   }, []);
 
-  // Check for saved session on mount
+  // Auto-restore saved session on mount
   useEffect(() => {
+    debugLogger.info('APP_INIT', 'Checking for saved session on mount', {});
     const savedState = loadProcessedState();
     if (savedState && savedState.rows.length > 0) {
-      setSavedSessionAvailable(true);
-      setShowSessionNotification(true);
+      debugLogger.info('APP_INIT', 'Restoring saved session', {
+        rowCount: savedState.rows.length,
+        directories: savedState.directories,
+      });
+      restoreProcessedState(savedState);
+      setSavedSessionAvailable(false);
+      setShowSessionNotification(false);
+    } else {
+      debugLogger.info('APP_INIT', 'No saved session found or session was empty', {
+        hasSavedState: !!savedState,
+        rowCount: savedState?.rows.length || 0,
+      });
     }
-  }, []);
-
-    // Auto-restore when user picks directories matching the saved session
-  useEffect(() => {
-    if (directories.length === 0 || rows.length > 0) return; // avoid overwriting active state
-    const savedState = loadProcessedState();
-    if (savedState && savedState.rows.length > 0) {
-      // Check if the selected directories match the saved ones
-      const savedDirs = savedState.directories || (savedState.directory ? [savedState.directory] : []);
-      const directoriesMatch = JSON.stringify(savedDirs.sort()) === JSON.stringify(directories.sort());
-      if (directoriesMatch) {
-        restoreProcessedState(savedState);
-        setSavedSessionAvailable(false);
-        setShowSessionNotification(false);
-      }
-    }
-  }, [directories]); // runs when directories change
+  }, []); // runs only once on mount
 
   const pickDirectory = async () => {
     try {
@@ -922,6 +958,11 @@ export default function App() {
     setEvents((prev: string[]) => [summary, ...prev]);
     setScanState('idle');
     setBusy(false);
+    
+    // Clear saved state after applying changes
+    clearProcessedState();
+    setSavedSessionAvailable(false);
+    setShowSessionNotification(false);
   };
 
   const updateRow = (i: number, patch: Partial<Row>) => {
