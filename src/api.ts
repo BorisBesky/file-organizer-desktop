@@ -37,6 +37,8 @@ export interface LLMConfig {
   maxTokens?: number;
   maxTextLength?: number; // Maximum characters to send to LLM for classification
   systemMessage?: string;
+  customPrompt?: string; // Custom prompt template for file classification
+  customCategoryPrompt?: string; // Custom prompt template for category optimization
   customHeaders?: Record<string, string>;
   supportsVision?: boolean; // Whether the model supports image inputs
 }
@@ -421,7 +423,7 @@ export async function classifyViaLLM(opts: {
     };
   }
   
-  const promptTemplate =
+  const defaultPromptTemplate =
  `You are a file organizer. Analyze the ${fileContent?.image_base64 ? 'image' : 'text content'} and provide classification and naming suggestions.
 
   **Task 1: Category Classification**
@@ -459,12 +461,33 @@ export async function classifyViaLLM(opts: {
   
   // Build prompt based on content type
   let prompt: string;
-  if (fileContent?.image_base64) {
-    // For images, just provide the original filename and instructions
-    prompt = `${promptTemplate}\n\nOriginal filename: ${originalName}${hint}`;
+  
+  if (config.customPrompt) {
+    // Use custom prompt template with placeholder replacement
+    const contentType = fileContent?.image_base64 ? 'image' : 'text';
+    const contentPreview = fileContent?.image_base64 
+      ? '[Image data - see attached image]' 
+      : text.slice(0, maxTextLength);
+    
+    prompt = config.customPrompt
+      .replace(/\{filename\}/g, originalName)
+      .replace(/\{content\}/g, contentPreview)
+      .replace(/\{type\}/g, contentType)
+      .replace(/\{categories\}/g, categoriesHint.join(', '));
+    
+    // Add hint if not already included in custom prompt
+    if (hint && !config.customPrompt.includes('{categories}')) {
+      prompt += hint;
+    }
   } else {
-    // For text content, include the text
-    prompt = `${promptTemplate}\n\nOriginal filename: ${originalName}\nContent (truncated to ${maxTextLength} chars):\n${text.slice(0, maxTextLength)}${hint}`;
+    // Use default prompt template
+    if (fileContent?.image_base64) {
+      // For images, just provide the original filename and instructions
+      prompt = `${defaultPromptTemplate}\n\nOriginal filename: ${originalName}${hint}`;
+    } else {
+      // For text content, include the text
+      prompt = `${defaultPromptTemplate}\n\nOriginal filename: ${originalName}\nContent (truncated to ${maxTextLength} chars):\n${text.slice(0, maxTextLength)}${hint}`;
+    }
   }
 
   const systemMessage = config.systemMessage || 'Return only valid JSON (no markdown), with keys: category_path, suggested_filename, confidence (0-1).';
@@ -562,7 +585,7 @@ export async function optimizeCategoriesViaLLM(opts: {
     .map(([category, files]) => `${category}/ (${files.length} files)`)
     .join('\n\n');
 
-const promptTemplate = 
+  const defaultPromptTemplate = 
 `You are a file organization optimizer. Analyze this directory structure and suggest optimizations.
 
 **Category Structure Rules**:
@@ -592,11 +615,23 @@ ${treeText}
 
 Analyze and suggest optimizations. Focus on similar categories that could be merged, naming inconsistencies changes first. Limit to 10 most important optimizations.`;
 
+  // Use custom prompt if provided, otherwise use default
+  let prompt: string;
+  if (config.customCategoryPrompt) {
+    // Replace placeholders in custom prompt
+    prompt = config.customCategoryPrompt
+      .replace(/\{directory_tree\}/g, treeText)
+      .replace(/\{tree\}/g, treeText)
+      .replace(/\{categories\}/g, treeText);
+  } else {
+    prompt = defaultPromptTemplate;
+  }
+
   const systemMessage = config.systemMessage || 'Return only valid JSON (no markdown), with key "optimizations" containing an array of optimization suggestions.';
   
   const endpoint = getCompletionEndpoint(config);
   const headers = buildHeaders(config);
-  const body = buildRequestBody(config, promptTemplate, systemMessage);
+  const body = buildRequestBody(config, prompt, systemMessage);
 
   let resp;
   try {

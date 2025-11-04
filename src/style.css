@@ -217,7 +217,13 @@ body {
   flex-direction: column;
   gap: 16px;
   position: relative;
-  transition: width 0.3s ease;
+  transition: width 0.3s ease, padding 0.3s ease, border-width 0.3s ease;
+}
+
+.app-sidebar[style*="width: 0px"] {
+  padding: 0;
+  border-right-width: 0;
+  overflow: hidden;
 }
 
 .sidebar-collapse-toggle {
@@ -1105,6 +1111,7 @@ label input[type="checkbox"] {
   background: var(--bg-input);
   color: var(--text-primary);
   box-sizing: border-box;
+  resize: vertical;
 }
 
 select.config-input {
