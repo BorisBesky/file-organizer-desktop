@@ -794,6 +794,32 @@ async fn get_llm_server_status(app: AppHandle, state: State<'_, ManagedLLMState>
     }
 }
 
+// Helper function to check if Vulkan runtime is available on Windows
+#[cfg(target_os = "windows")]
+fn is_vulkan_available() -> bool {
+    use std::path::PathBuf;
+    
+    // Check for vulkan-1.dll in System32
+    let system32 = std::env::var("SystemRoot")
+        .map(|root| PathBuf::from(root).join("System32"))
+        .unwrap_or_else(|_| PathBuf::from("C:\\Windows\\System32"));
+    
+    let vulkan_dll = system32.join("vulkan-1.dll");
+    
+    if vulkan_dll.exists() {
+        eprintln!("Vulkan runtime detected at: {}", vulkan_dll.display());
+        return true;
+    }
+    
+    eprintln!("Vulkan runtime not found in System32");
+    false
+}
+
+#[cfg(not(target_os = "windows"))]
+fn is_vulkan_available() -> bool {
+    false
+}
+
 #[command]
 async fn download_llm_server(app: AppHandle, version: String) -> Result<String, String> {
     let app_data_dir = app.path_resolver()
@@ -805,7 +831,14 @@ async fn download_llm_server(app: AppHandle, version: String) -> Result<String, 
 
     // Determine platform and download URL
     let (filename, extract_dir) = if cfg!(target_os = "windows") {
-        ("ollama_server-windows.zip", "ollama_server")
+        // Check if Vulkan is available for Windows
+        if is_vulkan_available() {
+            eprintln!("Using Vulkan-enabled server");
+            ("ollama_server-windows-vulkan.zip", "ollama_server")
+        } else {
+            eprintln!("Using CPU-only server (Vulkan not available)");
+            ("ollama_server-windows-cpu.zip", "ollama_server")
+        }
     } else if cfg!(target_os = "macos") {
         ("mlx_server-macos.tar.gz", "mlx_server")
     } else {

@@ -273,7 +273,7 @@ jobs:
           tag_name: ${{ steps.release_meta.outputs.tag_name }}
           name: ${{ steps.release_meta.outputs.release_name }}
           files: |
-            artifacts/ollama-server-windows/ollama_server-windows.zip
+            artifacts/ollama-server-windows-cpu/ollama_server-windows-cpu.zip
             artifacts/ollama-server-windows-vulkan/ollama_server-windows-vulkan.zip
             artifacts/ollama-server-linux/ollama_server-linux.tar.gz
             artifacts/mlx-server-macos/mlx_server-macos.tar.gz
