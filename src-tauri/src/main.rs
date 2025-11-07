@@ -577,118 +577,111 @@ async fn pick_directories_native() -> Result<Vec<String>, String> {
         Add-Type -AssemblyName System.Windows.Forms
         
         # Use Windows Shell IFileDialog COM interface for modern folder picker with multi-select
-        Add-Type @"
-            using System;
-            using System.Runtime.InteropServices;
-            using System.Collections.Generic;
+        $code = @"
+using System;
+using System.Runtime.InteropServices;
+using System.Collections.Generic;
+
+public class FolderPicker
+{
+    [ComImport]
+    [Guid("42f85136-db7e-439c-85f1-e4075d135fc8")]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface IFileOpenDialog
+    {
+        [PreserveSig] int Show([In] IntPtr parent);
+        void SetFileTypes([In] uint cFileTypes, [In] IntPtr rgFilterSpec);
+        void SetFileTypeIndex([In] uint iFileType);
+        void GetFileTypeIndex(out uint piFileType);
+        void Advise([In, MarshalAs(UnmanagedType.Interface)] IntPtr pfde, out uint pdwCookie);
+        void Unadvise([In] uint dwCookie);
+        void SetOptions([In] uint fos);
+        void GetOptions(out uint pfos);
+        void SetDefaultFolder([In, MarshalAs(UnmanagedType.Interface)] IShellItem psi);
+        void SetFolder([In, MarshalAs(UnmanagedType.Interface)] IShellItem psi);
+        void GetFolder([MarshalAs(UnmanagedType.Interface)] out IShellItem ppsi);
+        void GetCurrentSelection([MarshalAs(UnmanagedType.Interface)] out IShellItem ppsi);
+        void SetFileName([In, MarshalAs(UnmanagedType.LPWStr)] string pszName);
+        void GetFileName([MarshalAs(UnmanagedType.LPWStr)] out string pszName);
+        void SetTitle([In, MarshalAs(UnmanagedType.LPWStr)] string pszTitle);
+        void SetOkButtonLabel([In, MarshalAs(UnmanagedType.LPWStr)] string pszText);
+        void SetFileNameLabel([In, MarshalAs(UnmanagedType.LPWStr)] string pszLabel);
+        void GetResult([MarshalAs(UnmanagedType.Interface)] out IShellItem ppsi);
+        void AddPlace([In, MarshalAs(UnmanagedType.Interface)] IShellItem psi, int fdap);
+        void SetDefaultExtension([In, MarshalAs(UnmanagedType.LPWStr)] string pszDefaultExtension);
+        void Close([MarshalAs(UnmanagedType.Error)] int hr);
+        void SetClientGuid([In] ref Guid guid);
+        void ClearClientData();
+        void SetFilter([MarshalAs(UnmanagedType.Interface)] IntPtr pFilter);
+        void GetResults([MarshalAs(UnmanagedType.Interface)] out IShellItemArray ppenum);
+        void GetSelectedItems([MarshalAs(UnmanagedType.Interface)] out IShellItemArray ppsai);
+    }
+    
+    [ComImport]
+    [Guid("43826d1e-e718-42ee-bc55-a1e261c37bfe")]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface IShellItem
+    {
+        void BindToHandler([In, MarshalAs(UnmanagedType.Interface)] IntPtr pbc, [In] ref Guid bhid, [In] ref Guid riid, out IntPtr ppv);
+        void GetParent([MarshalAs(UnmanagedType.Interface)] out IShellItem ppsi);
+        void GetDisplayName([In] uint sigdnName, [MarshalAs(UnmanagedType.LPWStr)] out string ppszName);
+        void GetAttributes([In] uint sfgaoMask, out uint psfgaoAttribs);
+        void Compare([In, MarshalAs(UnmanagedType.Interface)] IShellItem psi, [In] uint hint, out int piOrder);
+    }
+    
+    [ComImport]
+    [Guid("b63ea76d-1f85-456f-a19c-48159efa858b")]
+    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    interface IShellItemArray
+    {
+        void BindToHandler([In, MarshalAs(UnmanagedType.Interface)] IntPtr pbc, [In] ref Guid rbhid, [In] ref Guid riid, out IntPtr ppvOut);
+        void GetPropertyStore([In] int flags, [In] ref Guid riid, out IntPtr ppv);
+        void GetPropertyDescriptionList([In] IntPtr keyType, [In] ref Guid riid, out IntPtr ppv);
+        void GetAttributes([In] uint dwAttribFlags, [In] uint sfgaoMask, out uint psfgaoAttribs);
+        void GetCount(out uint pdwNumItems);
+        void GetItemAt([In] uint dwIndex, [MarshalAs(UnmanagedType.Interface)] out IShellItem ppsi);
+        void EnumItems([MarshalAs(UnmanagedType.Interface)] out IntPtr ppenumShellItems);
+    }
+    
+    [ComImport]
+    [Guid("DC1C5A9C-E88A-4dde-A5A1-60F82A20AEF7")]
+    class FileOpenDialog { }
+    
+    const uint FOS_PICKFOLDERS = 0x00000020;
+    const uint FOS_ALLOWMULTISELECT = 0x00000200;
+    const uint SIGDN_FILESYSPATH = 0x80058000;
+    
+    public static string[] ShowFolderPicker()
+    {
+        var dialog = (IFileOpenDialog)new FileOpenDialog();
+        dialog.SetOptions(FOS_PICKFOLDERS | FOS_ALLOWMULTISELECT);
+        dialog.SetTitle("Select one or more folders (Ctrl+Click for multiple)");
+        
+        var result = dialog.Show(IntPtr.Zero);
+        if (result == 0)
+        {
+            IShellItemArray results;
+            dialog.GetResults(out results);
+            uint count;
+            results.GetCount(out count);
             
-            public class FolderPicker
+            var paths = new List<string>();
+            for (uint i = 0; i < count; i++)
             {
-                [ComImport]
-                [Guid("42f85136-db7e-439c-85f1-e4075d135fc8")]
-                [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-                interface IFileOpenDialog
-                {
-                    [PreserveSig] int Show([In] IntPtr parent);
-                    void SetFileTypes([In] uint cFileTypes, [In] IntPtr rgFilterSpec);
-                    void SetFileTypeIndex([In] uint iFileType);
-                    void GetFileTypeIndex(out uint piFileType);
-                    void Advise([In, MarshalAs(UnmanagedType.Interface)] IntPtr pfde, out uint pdwCookie);
-                    void Unadvise([In] uint dwCookie);
-                    void SetOptions([In] uint fos);
-                    void GetOptions(out uint pfos);
-                    void SetDefaultFolder([In, MarshalAs(UnmanagedType.Interface)] IShellItem psi);
-                    void SetFolder([In, MarshalAs(UnmanagedType.Interface)] IShellItem psi);
-                    void GetFolder([MarshalAs(UnmanagedType.Interface)] out IShellItem ppsi);
-                    void GetCurrentSelection([MarshalAs(UnmanagedType.Interface)] out IShellItem ppsi);
-                    void SetFileName([In, MarshalAs(UnmanagedType.LPWStr)] string pszName);
-                    void GetFileName([MarshalAs(UnmanagedType.LPWStr)] out string pszName);
-                    void SetTitle([In, MarshalAs(UnmanagedType.LPWStr)] string pszTitle);
-                    void SetOkButtonLabel([In, MarshalAs(UnmanagedType.LPWStr)] string pszText);
-                    void SetFileNameLabel([In, MarshalAs(UnmanagedType.LPWStr)] string pszLabel);
-                    void GetResult([MarshalAs(UnmanagedType.Interface)] out IShellItem ppsi);
-                    void AddPlace([In, MarshalAs(UnmanagedType.Interface)] IShellItem psi, int fdap);
-                    void SetDefaultExtension([In, MarshalAs(UnmanagedType.LPWStr)] string pszDefaultExtension);
-                    void Close([MarshalAs(UnmanagedType.Error)] int hr);
-                    void SetClientGuid([In] ref Guid guid);
-                    void ClearClientData();
-                    void SetFilter([MarshalAs(UnmanagedType.Interface)] IntPtr pFilter);
-                    void GetResults([MarshalAs(UnmanagedType.Interface)] out IShellItemArray ppenum);
-                    void GetSelectedItems([MarshalAs(UnmanagedType.Interface)] out IShellItemArray ppsai);
-                }
-                
-                [ComImport]
-                [Guid("43826d1e-e718-42ee-bc55-a1e261c37bfe")]
-                [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-                interface IShellItem
-                {
-                    void BindToHandler([In, MarshalAs(UnmanagedType.Interface)] IntPtr pbc,
-                        [In] ref Guid bhid,
-                        [In] ref Guid riid,
-                        out IntPtr ppv);
-                    void GetParent([MarshalAs(UnmanagedType.Interface)] out IShellItem ppsi);
-                    void GetDisplayName([In] uint sigdnName, [MarshalAs(UnmanagedType.LPWStr)] out string ppszName);
-                    void GetAttributes([In] uint sfgaoMask, out uint psfgaoAttribs);
-                    void Compare([In, MarshalAs(UnmanagedType.Interface)] IShellItem psi, [In] uint hint, out int piOrder);
-                }
-                
-                [ComImport]
-                [Guid("b63ea76d-1f85-456f-a19c-48159efa858b")]
-                [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-                interface IShellItemArray
-                {
-                    void BindToHandler([In, MarshalAs(UnmanagedType.Interface)] IntPtr pbc,
-                        [In] ref Guid rbhid,
-                        [In] ref Guid riid,
-                        out IntPtr ppvOut);
-                    void GetPropertyStore([In] int flags,
-                        [In] ref Guid riid,
-                        out IntPtr ppv);
-                    void GetPropertyDescriptionList([In] IntPtr keyType,
-                        [In] ref Guid riid,
-                        out IntPtr ppv);
-                    void GetAttributes([In] uint dwAttribFlags,
-                        [In] uint sfgaoMask,
-                        out uint psfgaoAttribs);
-                    void GetCount(out uint pdwNumItems);
-                    void GetItemAt([In] uint dwIndex,
-                        [MarshalAs(UnmanagedType.Interface)] out IShellItem ppsi);
-                    void EnumItems([MarshalAs(UnmanagedType.Interface)] out IntPtr ppenumShellItems);
-                }
-                
-                [ComImport]
-                [Guid("DC1C5A9C-E88A-4dde-A5A1-60F82A20AEF7")]
-                class FileOpenDialog { }
-                
-                const uint FOS_PICKFOLDERS = 0x00000020;
-                const uint FOS_ALLOWMULTISELECT = 0x00000200;
-                const uint SIGDN_FILESYSPATH = 0x80058000;
-                
-                public static string[] ShowFolderPicker()
-                {
-                    var dialog = (IFileOpenDialog)new FileOpenDialog();
-                    dialog.SetOptions(FOS_PICKFOLDERS | FOS_ALLOWMULTISELECT);
-                    dialog.SetTitle("Select one or more folders (Ctrl+Click for multiple)");
-                    
-                    var result = dialog.Show(IntPtr.Zero);
-                    if (result == 0)
-                    {
-                        dialog.GetResults(out IShellItemArray results);
-                        results.GetCount(out uint count);
-                        
-                        var paths = new List<string>();
-                        for (uint i = 0; i < count; i++)
-                        {
-                            results.GetItemAt(i, out IShellItem item);
-                            item.GetDisplayName(SIGDN_FILESYSPATH, out string path);
-                            paths.Add(path);
-                        }
-                        return paths.ToArray();
-                    }
-                    return new string[0];
-                }
+                IShellItem item;
+                results.GetItemAt(i, out item);
+                string path;
+                item.GetDisplayName(SIGDN_FILESYSPATH, out path);
+                paths.Add(path);
             }
+            return paths.ToArray();
+        }
+        return new string[0];
+    }
+}
 "@
+        
+        Add-Type -TypeDefinition $code
         
         $folders = [FolderPicker]::ShowFolderPicker()
         foreach ($folder in $folders) {
