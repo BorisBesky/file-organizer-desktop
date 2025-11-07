@@ -532,7 +532,36 @@ async fn move_file(from: String, to: String) -> Result<(), String> {
 
 #[tauri::command]
 async fn pick_directory(_app: AppHandle) -> Result<Vec<String>, String> {
-    pick_directories_native().await
+    use rfd::FileDialog;
+    use std::path::PathBuf;
+
+        // Open the dialog
+    let folders: Option<Vec<PathBuf>> = FileDialog::new()
+        .set_title("Select one or more directories")
+        .pick_folders();
+
+    // Handle the result
+    match folders {
+        Some(paths) => {
+            if paths.is_empty() {
+                // This case might happen if the dialog logic allows "OK" with no selection
+                eprintln!("No directories were selected.");
+                return Err("No directories selected".to_string());
+            } else {
+                eprintln!("You selected the following directories:");
+                let strs: Vec<String> = paths.iter().map(|p| p.to_string_lossy().into_owned()).collect();
+                for p in &strs {
+                    eprintln!("- {}", p);
+                }
+                return Ok(strs);
+            }
+        }
+        None => {
+            // This happens if the user presses "Cancel" or closes the dialog
+            eprintln!("Dialog was canceled. No directories selected.");
+            return Err("User cancelled folder selection".to_string());
+        }
+    }
 }
 
 #[cfg(target_os = "macos")]
@@ -649,34 +678,84 @@ public class FolderPicker
     
     const uint FOS_PICKFOLDERS = 0x00000020;
     const uint FOS_ALLOWMULTISELECT = 0x00000200;
+    const uint FOS_FORCEFILESYSTEM = 0x00000040;
     const uint SIGDN_FILESYSPATH = 0x80058000;
+    const uint SIGDN_DESKTOPABSOLUTEPARSING = 0x80028000;
     
     public static string[] ShowFolderPicker()
     {
         var dialog = (IFileOpenDialog)new FileOpenDialog();
-        dialog.SetOptions(FOS_PICKFOLDERS | FOS_ALLOWMULTISELECT);
+        uint options;
+        dialog.GetOptions(out options);
+        dialog.SetOptions(options | FOS_PICKFOLDERS | FOS_ALLOWMULTISELECT | FOS_FORCEFILESYSTEM);
         dialog.SetTitle("Select one or more folders (Ctrl+Click for multiple)");
         
         var result = dialog.Show(IntPtr.Zero);
         if (result == 0)
         {
+            var paths = new List<string>();
             IShellItemArray results;
             dialog.GetResults(out results);
-            uint count;
-            results.GetCount(out count);
-            
-            var paths = new List<string>();
-            for (uint i = 0; i < count; i++)
+            if (results != null)
             {
-                IShellItem item;
-                results.GetItemAt(i, out item);
-                string path;
-                item.GetDisplayName(SIGDN_FILESYSPATH, out path);
-                paths.Add(path);
+                uint count;
+                results.GetCount(out count);
+                
+                for (uint i = 0; i < count; i++)
+                {
+                    IShellItem item;
+                    results.GetItemAt(i, out item);
+                    if (item == null)
+                    {
+                        continue;
+                    }
+                    string path;
+                    item.GetDisplayName(SIGDN_FILESYSPATH, out path);
+                    if (string.IsNullOrEmpty(path))
+                    {
+                        item.GetDisplayName(SIGDN_DESKTOPABSOLUTEPARSING, out path);
+                    }
+                    if (!string.IsNullOrEmpty(path))
+                    {
+                        paths.Add(path);
+                    }
+                }
             }
-            return paths.ToArray();
+            
+            if (paths.Count == 0)
+            {
+                IShellItem singleItem;
+                dialog.GetResult(out singleItem);
+                if (singleItem != null)
+                {
+                    string path;
+                    singleItem.GetDisplayName(SIGDN_FILESYSPATH, out path);
+                    if (string.IsNullOrEmpty(path))
+                    {
+                        singleItem.GetDisplayName(SIGDN_DESKTOPABSOLUTEPARSING, out path);
+                    }
+                    if (!string.IsNullOrEmpty(path))
+                    {
+                        paths.Add(path);
+                    }
+                }
+            }
+            
+            if (paths.Count > 0)
+            {
+                return paths.ToArray();
+            }
+            return new string[0];
         }
-        return new string[0];
+        else if (result == unchecked((int)0x800704C7))
+        {
+            return new string[0];
+        }
+        else
+        {
+            Marshal.ThrowExceptionForHR(result);
+            return new string[0];
+        }
     }
 }
 "@
@@ -691,6 +770,7 @@ public class FolderPicker
     
     let output = Command::new("powershell")
         .arg("-NoProfile")
+        .arg("-STA")
         .arg("-Command")
         .arg(script)
         .output()
