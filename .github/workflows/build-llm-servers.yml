@@ -94,7 +94,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install pyinstaller
-          pip install https://github.com/BorisBesky/file-organizer-desktop/releases/download/v0.3.16/llama_cpp_python-0.3.16-cp313-cp313-vulkan-win_amd64.whl
+          pip install https://github.com/BorisBesky/file-organizer-desktop/releases/download/v0.3.16/llama_cpp_python-0.3.16+vulkan-cp313-cp313-win_amd64.whl
           pip install fastapi uvicorn pydantic huggingface-hub
         
       - name: Update version if manually triggered
