@@ -11,7 +11,6 @@ use std::panic;
 use std::sync::{Mutex, OnceLock, Arc};
 use std::process::{Child, Command, Stdio};
 use std::collections::HashMap;
-use tauri::api::dialog::FileDialogBuilder;
 use tauri::{command, AppHandle, Manager, CustomMenuItem, Menu, MenuItem, Submenu, WindowMenuEvent, State};
 use walkdir::WalkDir;
 use docx_rs::*;
@@ -509,13 +508,145 @@ async fn move_file(from: String, to: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn pick_directory(app: AppHandle) {
-    FileDialogBuilder::new().pick_folder(move |folder_path| {
-        if let Some(path) = folder_path {
-            let path_str = path.to_str().unwrap_or("").to_string();
-            app.emit_all("directory-selected", path_str).unwrap();
+async fn pick_directory(_app: AppHandle) -> Result<Vec<String>, String> {
+    pick_directories_native().await
+}
+
+#[cfg(target_os = "macos")]
+async fn pick_directories_native() -> Result<Vec<String>, String> {
+    use std::process::Command;
+    
+    let script = r#"
+        set selectedFolders to choose folder with prompt "Select one or more folders" with multiple selections allowed
+        set folderPaths to {}
+        repeat with aFolder in selectedFolders
+            set end of folderPaths to POSIX path of aFolder
+        end repeat
+        return folderPaths
+    "#;
+    
+    let output = Command::new("osascript")
+        .arg("-e")
+        .arg(script)
+        .output()
+        .map_err(|e| format!("Failed to run dialog: {}", e))?;
+    
+    if !output.status.success() {
+        return Err("User cancelled folder selection".to_string());
+    }
+    
+    let output_str = String::from_utf8_lossy(&output.stdout);
+    let paths: Vec<String> = output_str
+        .trim()
+        .split(", ")
+        .filter(|s| !s.is_empty())
+        .map(|s| s.trim().to_string())
+        .collect();
+    
+    Ok(paths)
+}
+
+#[cfg(target_os = "windows")]
+async fn pick_directories_native() -> Result<Vec<String>, String> {
+    use std::process::Command;
+    
+    let script = r#"
+        Add-Type -AssemblyName System.Windows.Forms
+        $folderBrowser = New-Object System.Windows.Forms.FolderBrowserDialog
+        $folderBrowser.Description = "Select folders (Ctrl+Click for multiple)"
+        $folderBrowser.ShowNewFolderButton = $false
+        
+        # Use a custom dialog that supports multiple selection
+        $shell = New-Object -ComObject Shell.Application
+        $folder = $shell.BrowseForFolder(0, "Select one or more folders (Ctrl+Click)", 0x200, 0)
+        
+        if ($folder -ne $null) {
+            $selectedItems = $folder.Items()
+            foreach ($item in $selectedItems) {
+                Write-Output $item.Path
+            }
         }
-    });
+    "#;
+    
+    let output = Command::new("powershell")
+        .arg("-NoProfile")
+        .arg("-NonInteractive")
+        .arg("-Command")
+        .arg(script)
+        .output()
+        .map_err(|e| format!("Failed to run dialog: {}", e))?;
+    
+    if !output.status.success() {
+        return Err("User cancelled folder selection".to_string());
+    }
+    
+    let output_str = String::from_utf8_lossy(&output.stdout);
+    let paths: Vec<String> = output_str
+        .lines()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+    
+    if paths.is_empty() {
+        return Err("No folders selected".to_string());
+    }
+    
+    Ok(paths)
+}
+
+#[cfg(target_os = "linux")]
+async fn pick_directories_native() -> Result<Vec<String>, String> {
+    use std::process::Command;
+    
+    // Try zenity first
+    let output = Command::new("zenity")
+        .arg("--file-selection")
+        .arg("--directory")
+        .arg("--multiple")
+        .arg("--separator=\n")
+        .arg("--title=Select one or more folders")
+        .output();
+    
+    if let Ok(output) = output {
+        if output.status.success() {
+            let output_str = String::from_utf8_lossy(&output.stdout);
+            let paths: Vec<String> = output_str
+                .lines()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect();
+            
+            if !paths.is_empty() {
+                return Ok(paths);
+            }
+        }
+    }
+    
+    // Try kdialog as fallback
+    let output = Command::new("kdialog")
+        .arg("--getexistingdirectory")
+        .arg("--multiple")
+        .arg("--separate-output")
+        .arg("--title")
+        .arg("Select one or more folders")
+        .output();
+    
+    if let Ok(output) = output {
+        if output.status.success() {
+            let output_str = String::from_utf8_lossy(&output.stdout);
+            let paths: Vec<String> = output_str
+                .lines()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect();
+            
+            if !paths.is_empty() {
+                return Ok(paths);
+            }
+        }
+    }
+    
+    Err("No suitable dialog found. Please install zenity or kdialog.".to_string())
 }
 
 #[tauri::command]

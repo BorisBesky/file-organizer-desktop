@@ -449,6 +449,38 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled, pro
               </div>
               <div className="config-section">
                 <label className="config-label">
+                  Custom Prompt (File Classification)
+                  <textarea
+                    className="config-textarea"
+                    value={config.customPrompt || ''}
+                    onChange={(e) => onChange({ ...config, customPrompt: e.target.value })}
+                    placeholder="Enter your custom prompt template here. Use {filename}, {content}, {type}, and {categories} as placeholders."
+                    rows={5}
+                    disabled={disabled}
+                  />
+                </label>
+                <div className="config-hint">
+                  Override the default prompt used for file classification. Available placeholders: {'{filename}'}, {'{content}'}, {'{type}'}, {'{categories}'}
+                </div>
+              </div>
+              <div className="config-section">
+                <label className="config-label">
+                  Custom Prompt (Category Optimization)
+                  <textarea
+                    className="config-textarea"
+                    value={config.customCategoryPrompt || ''}
+                    onChange={(e) => onChange({ ...config, customCategoryPrompt: e.target.value })}
+                    placeholder="Enter your custom prompt for category optimization. Use {directory_tree}, {tree}, or {categories} as placeholders."
+                    rows={5}
+                    disabled={disabled}
+                  />
+                </label>
+                <div className="config-hint">
+                  Override the default prompt used for category optimization/consolidation. Available placeholders: {'{directory_tree}'}, {'{tree}'}, {'{categories}'}
+                </div>
+              </div>
+              <div className="config-section">
+                <label className="config-label">
                   Custom Headers (JSON)
                   <textarea
                     className={`config-textarea ${!isCustomHeadersValid ? 'input-error' : ''}`}

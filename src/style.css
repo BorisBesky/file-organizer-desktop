@@ -217,7 +217,13 @@ body {
   flex-direction: column;
   gap: 16px;
   position: relative;
-  transition: width 0.3s ease;
+  transition: width 0.3s ease, padding 0.3s ease, border-width 0.3s ease;
+}
+
+.app-sidebar[style*="width: 0px"] {
+  padding: 0;
+  border-right-width: 0;
+  overflow: hidden;
 }
 
 .sidebar-collapse-toggle {
@@ -306,6 +312,56 @@ body {
   font-size: 11px;
   word-break: break-all;
   color: var(--text-secondary);
+}
+
+.directories-list {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.directory-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.directory-item .directory-display {
+  flex: 1;
+  margin-top: 0;
+}
+
+.directory-remove-btn {
+  background: var(--accent-red);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 18px;
+  line-height: 1;
+  padding: 0;
+  flex-shrink: 0;
+  transition: background-color 0.2s ease;
+}
+
+.directory-remove-btn:hover:not(:disabled) {
+  background: var(--danger-hover, #e52d22);
+}
+
+.directory-remove-btn:active:not(:disabled) {
+  background: var(--danger-active, #cc2619);
+}
+
+.directory-remove-btn:disabled {
+  background: var(--button-disabled-bg);
+  color: var(--button-disabled-text);
+  cursor: not-allowed;
 }
 
 .content-section {
@@ -1055,6 +1111,7 @@ label input[type="checkbox"] {
   background: var(--bg-input);
   color: var(--text-primary);
   box-sizing: border-box;
+  resize: vertical;
 }
 
 select.config-input {

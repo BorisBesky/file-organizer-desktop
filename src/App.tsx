@@ -118,7 +118,7 @@ export default function App() {
       env_vars: {}
     };
   });
-  const [directory, setDirectory] = useState<string | null>(null);
+  const [directories, setDirectories] = useState<string[]>([]);
   const [includeSubdirectories, setIncludeSubdirectories] = useState(false);
   const [busy, setBusy] = useState(false);
   const [events, setEvents] = useState<string[]>([]);
@@ -273,7 +273,7 @@ export default function App() {
   // Auto-save on app exit/unmount using beforeunload event
   useEffect(() => {
     const handleBeforeUnload = () => {
-      if (rows.length > 0 && directory) {
+      if (rows.length > 0 && directories.length > 0) {
         saveProcessedState();
       }
     };
@@ -283,11 +283,11 @@ export default function App() {
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload);
       // Also save on component unmount
-      if (rows.length > 0 && directory) {
+      if (rows.length > 0 && directories.length > 0) {
         saveProcessedState();
       }
     };
-  }, [rows, directory, scanState, progress, includeSubdirectories]);
+  }, [rows, directories, scanState, progress, includeSubdirectories]);
 
   // Migrate old config format on first load
   useEffect(() => {
@@ -378,14 +378,7 @@ export default function App() {
     }
   };
 
-  useEffect(() => {
-    const unlisten = listen<string>('directory-selected', (event) => {
-      setDirectory(event.payload);
-    });
-    return () => {
-      unlisten.then(f => f());
-    };
-  }, []);
+  // Removed the directory-selected event listener since we now use direct invoke
 
   useEffect(() => {
     const unlistenHelp = listen('show-help', () => {
@@ -409,30 +402,53 @@ export default function App() {
     }
   }, []);
 
-    // Auto-restore when user picks the same directory as the saved session
+    // Auto-restore when user picks directories matching the saved session
   useEffect(() => {
-    if (!directory || rows.length > 0) return; // avoid overwriting active state
+    if (directories.length === 0 || rows.length > 0) return; // avoid overwriting active state
     const savedState = loadProcessedState();
-    if (savedState && savedState.rows.length > 0 && savedState.directory === directory) {
-      restoreProcessedState(savedState);
-      setSavedSessionAvailable(false);
-      setShowSessionNotification(false);
+    if (savedState && savedState.rows.length > 0) {
+      // Check if the selected directories match the saved ones
+      const savedDirs = savedState.directories || (savedState.directory ? [savedState.directory] : []);
+      const directoriesMatch = JSON.stringify(savedDirs.sort()) === JSON.stringify(directories.sort());
+      if (directoriesMatch) {
+        restoreProcessedState(savedState);
+        setSavedSessionAvailable(false);
+        setShowSessionNotification(false);
+      }
     }
-  }, [directory]); // runs when directory changes
+  }, [directories]); // runs when directories change
 
-  const pickDirectory = () => {
-    invoke('pick_directory');
+  const pickDirectory = async () => {
+    try {
+      const selectedDirs: string[] = await invoke('pick_directory');
+      if (selectedDirs && selectedDirs.length > 0) {
+        setDirectories(prev => {
+          // Add new directories, avoiding duplicates
+          const newDirs = selectedDirs.filter(dir => !prev.includes(dir));
+          return [...prev, ...newDirs];
+        });
+        setEvents((prev: string[]) => [
+          `Selected ${selectedDirs.length} director${selectedDirs.length === 1 ? 'y' : 'ies'}`,
+          ...prev
+        ]);
+      }
+    } catch (error: any) {
+      // User cancelled or error occurred
+      if (error && !error.includes('cancelled')) {
+        setEvents((prev: string[]) => [`Error selecting directories: ${error}`, ...prev]);
+      }
+    }
   };
 
   // Save processed files state to localStorage
   const saveProcessedState = () => {
-    if (!directory || rows.length === 0) {
+    if (directories.length === 0 || rows.length === 0) {
       return; // Nothing to save
     }
 
     try {
       const state: SavedProcessedState = {
-        directory,
+        directories,
         includeSubdirectories,
         rows,
         processedFiles: scanControlRef.current.processedFiles,
@@ -447,7 +463,7 @@ export default function App() {
       localStorage.setItem('processedFilesState', JSON.stringify(state));
       debugLogger.info('APP_STATE', 'Saved processed files state', { 
         rowCount: rows.length, 
-        directory 
+        directories 
       });
     } catch (error) {
       debugLogger.error('APP_STATE', 'Failed to save processed files state', { error });
@@ -460,9 +476,14 @@ export default function App() {
       const saved = localStorage.getItem('processedFilesState');
       if (saved) {
         const state: SavedProcessedState = JSON.parse(saved);
+        // Handle backwards compatibility: convert old directory field to directories array
+        if (state.directory && !state.directories) {
+          state.directories = [state.directory];
+        }
+        const dirs = state.directories || [];
         debugLogger.info('APP_STATE', 'Found saved processed files state', {
           rowCount: state.rows.length,
-          directory: state.directory,
+          directories: dirs,
           age: Math.round((Date.now() - state.timestamp) / 1000 / 60) + ' minutes ago'
         });
         return state;
@@ -476,7 +497,9 @@ export default function App() {
   // Restore processed files state
   const restoreProcessedState = (state: SavedProcessedState) => {
     try {
-      setDirectory(state.directory);
+      // Handle backwards compatibility: use directories if available, otherwise fall back to directory
+      const dirs = state.directories || (state.directory ? [state.directory] : []);
+      setDirectories(dirs);
       setIncludeSubdirectories(state.includeSubdirectories);
       setRows(state.rows);
       setProgress(state.progress);
@@ -625,10 +648,14 @@ export default function App() {
         const ext = '.' + (f.split('.').pop() || '');
         const safe = sanitizeFilename(result.suggested_filename || splitPath(f).name);
         const dir = sanitizeDirpath(result.category_path || 'uncategorized');
-        const dst = `${directory}/${dir}/${safe}${ext}`;
+        const rootDir = findRootDirectory(f);
+        const dst = rootDir ? `${rootDir}/${dir}/${safe}${ext}` : `${dir}/${safe}${ext}`;
         let finalDst = dst;
         let j = 1;
-        while (used.has(finalDst)) { finalDst = `${directory}/${dir}/${safe}-${j}${ext}`; j += 1; }
+        while (used.has(finalDst)) { 
+          finalDst = rootDir ? `${rootDir}/${dir}/${safe}-${j}${ext}` : `${dir}/${safe}-${j}${ext}`; 
+          j += 1; 
+        }
         used.add(finalDst);
         info.llm = result;
         info.dst = finalDst;
@@ -657,10 +684,22 @@ export default function App() {
     return Array.from(set);
   }, [rows]);
 
+  // Helper function to find which directory a file belongs to
+  const findRootDirectory = (filePath: string): string | null => {
+    for (const dir of directories) {
+      const normalizedDir = dir.endsWith('/') ? dir : dir + '/';
+      if (filePath.startsWith(normalizedDir)) {
+        return dir;
+      }
+    }
+    // Fallback: use the first directory if no match found
+    return directories.length > 0 ? directories[0] : null;
+  };
+
 
   const scan = async () => {
-    if (!directory) {
-      alert('Pick a directory first');
+    if (directories.length === 0) {
+      alert('Pick at least one directory first');
       return;
     }
 
@@ -722,18 +761,26 @@ export default function App() {
     setProgress({ current: 0, total: 0 });
 
     try {
-      const files: string[] = await invoke('read_directory', { path: directory, includeSubdirectories: includeSubdirectories });
-      const processableFiles = files.filter(f => !splitPath(f).name.startsWith('.'));
+      // Collect files from all selected directories
+      let allFilesFromAllDirs: string[] = [];
+      
+      for (const directory of directories) {
+        setEvents((prev: string[]) => [`Scanning directory: ${directory}`, ...prev]);
+        const files: string[] = await invoke('read_directory', { path: directory, includeSubdirectories: includeSubdirectories });
+        const processableFiles = files.filter(f => !splitPath(f).name.startsWith('.'));
+        allFilesFromAllDirs = allFilesFromAllDirs.concat(processableFiles);
+        setEvents((prev: string[]) => [`  Found ${processableFiles.length} files in ${directory}`, ...prev]);
+      }
 
-      scanControlRef.current.allFiles = processableFiles;
-      setProgress({ current: 0, total: processableFiles.length });
+      scanControlRef.current.allFiles = allFilesFromAllDirs;
+      setProgress({ current: 0, total: allFilesFromAllDirs.length });
 
-      setEvents((prev: string[]) => [`Found ${processableFiles.length} files to process`, ...prev]);
+      setEvents((prev: string[]) => [`Total: ${allFilesFromAllDirs.length} files to process from ${directories.length} director${directories.length === 1 ? 'y' : 'ies'}`, ...prev]);
 
       // Start processing files
       await processRemainingFiles();
     } catch (error: any) {
-      setEvents((prev: string[]) => [`Error reading directory: ${error.message || String(error)}`, ...prev]);
+      setEvents((prev: string[]) => [`Error reading directories: ${error.message || String(error)}`, ...prev]);
       setBusy(false);
       setScanState('idle');
     }
@@ -920,13 +967,23 @@ export default function App() {
     };
   };
 
-  const toPath = (r: Row) => `${directory}/${r.category}/${r.name}${r.ext}`;
+  const toPath = (r: Row) => {
+    const rootDir = findRootDirectory(r.src);
+    return rootDir ? `${rootDir}/${r.category}/${r.name}${r.ext}` : `${r.category}/${r.name}${r.ext}`;
+  };
   
-  // Get relative path from the selected directory
+  // Get relative path from the selected directories
   const getRelativePath = (fullPath: string) => {
-    if (!directory) return fullPath;
-    const dirWithSlash = directory.endsWith('/') ? directory : directory + '/';
-    return fullPath.startsWith(dirWithSlash) ? fullPath.slice(dirWithSlash.length) : fullPath;
+    if (directories.length === 0) return fullPath;
+    
+    // Find which directory this file belongs to
+    for (const dir of directories) {
+      const dirWithSlash = dir.endsWith('/') ? dir : dir + '/';
+      if (fullPath.startsWith(dirWithSlash)) {
+        return fullPath.slice(dirWithSlash.length);
+      }
+    }
+    return fullPath;
   };
   
   const getRelativeToPath = (r: Row) => `${r.category}/${r.name}${r.ext}`;
@@ -1145,7 +1202,7 @@ export default function App() {
             <div className="header-scan-buttons">
               <button 
                 onClick={scan} 
-                disabled={busy || !directory || scanState === 'scanning'}
+                disabled={busy || directories.length === 0 || scanState === 'scanning'}
               >
                 {scanState === 'scanning' ? 'Scanning...' : scanState === 'stopped' ? 'Resume Scan' : 'Start Scan'}
               </button>
@@ -1183,10 +1240,24 @@ export default function App() {
               {/* Directory Picker Section */}
               <div className="sidebar-section">
                 <button onClick={pickDirectory} disabled={busy || scanState === 'scanning' || scanState === 'stopped'} className="w-full">
-                  Pick Directory
+                  Select Directories
                 </button>
-                {directory && (
-                  <div className="directory-display">{directory}</div>
+                {directories.length > 0 && (
+                  <div className="directories-list">
+                    {directories.map((dir, index) => (
+                      <div key={index} className="directory-item">
+                        <div className="directory-display" title={dir}>{dir}</div>
+                        <button
+                          className="directory-remove-btn"
+                          onClick={() => setDirectories(directories.filter((_, i) => i !== index))}
+                          disabled={busy || scanState === 'scanning' || scanState === 'stopped'}
+                          title="Remove directory"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
                 )}
                 <label className="mt8">
                   <input 

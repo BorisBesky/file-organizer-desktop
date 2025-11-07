@@ -53,7 +53,8 @@ export interface ManagedLLMConfig {
 
 // Saved processed files state for persistence
 export interface SavedProcessedState {
-  directory: string;
+  directory?: string; // For backwards compatibility
+  directories?: string[]; // New field for multiple directories
   includeSubdirectories: boolean;
   rows: Row[];
   processedFiles: any[];
