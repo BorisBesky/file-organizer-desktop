@@ -58,18 +58,71 @@ jobs:
       
       - name: Build with PyInstaller
         working-directory: llm-server/windows/ollama
-        run: pyinstaller ollama_server.spec
+        run: |
+          pyinstaller ollama_server.spec
+          mv dist dist-cpu
       
       - name: Package artifact
-        working-directory: llm-server/windows/ollama/dist
+        working-directory: llm-server/windows/ollama/dist-cpu
         run: |
-          Compress-Archive -Path ollama_server -DestinationPath ollama_server-windows.zip
+          Compress-Archive -Path ollama_server -DestinationPath ollama_server-windows-cpu.zip
       
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ollama-server-windows
-          path: llm-server/windows/ollama/dist/ollama_server-windows.zip
+          name: ollama-server-windows-cpu
+          path: llm-server/windows/ollama/dist-cpu/ollama_server-windows-cpu.zip
+          retention-days: 30
+
+  build-windows-ollama-vulkan:
+    runs-on: windows-latest
+    if: |
+      github.event_name == 'push' || 
+      contains(github.event.inputs.platforms, 'all') || 
+      contains(github.event.inputs.platforms, 'windows')
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+          pip install https://github.com/BorisBesky/file-organizer-desktop/releases/download/v0.3.16/llama_cpp_python-0.3.16-cp313-cp313-vulkan-win_amd64.whl
+          pip install fastapi uvicorn pydantic huggingface-hub
+        
+      - name: Update version if manually triggered
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          BUILD_DATE=$(date +%Y-%m-%d)          
+          __version__ = "$VERSION"
+          __build_date__ = "$BUILD_DATE"
+          EOF
+      
+      - name: Build with PyInstaller
+        working-directory: llm-server/windows/ollama
+        run: |
+          pyinstaller ollama_server.spec
+          mv dist dist-vulkan
+      
+      - name: Package artifact
+        working-directory: llm-server/windows/ollama/dist-vulkan
+        run: |
+          Compress-Archive -Path ollama_server -DestinationPath ollama_server-windows-vulkan.zip
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ollama-server-windows-vulkan
+          path: llm-server/windows/ollama/dist-vulkan/ollama_server-windows-vulkan.zip
           retention-days: 30
 
   build-linux-ollama:
@@ -177,7 +230,7 @@ jobs:
           retention-days: 30
 
   create-release:
-    needs: [build-windows-ollama, build-linux-ollama, build-macos-mlx]
+    needs: [build-windows-ollama, build-windows-ollama-vulkan, build-linux-ollama, build-macos-mlx]
     runs-on: ubuntu-latest
     if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/llm-v')
     permissions:
@@ -217,6 +270,7 @@ jobs:
           name: ${{ steps.release_meta.outputs.release_name }}
           files: |
             artifacts/ollama-server-windows/ollama_server-windows.zip
+            artifacts/ollama-server-windows-vulkan/ollama_server-windows-vulkan.zip
             artifacts/ollama-server-linux/ollama_server-linux.tar.gz
             artifacts/mlx-server-macos/mlx_server-macos.tar.gz
           draft: ${{ steps.release_meta.outputs.draft }}
