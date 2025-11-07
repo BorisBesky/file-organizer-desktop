@@ -102,7 +102,11 @@ jobs:
         shell: bash
         run: |
           VERSION="${{ github.event.inputs.version }}"
-          BUILD_DATE=$(date +%Y-%m-%d)          
+          BUILD_DATE=$(date +%Y-%m-%d)
+          echo "Updating version to $VERSION (build date: $BUILD_DATE)"
+          cat > llm-server/windows/ollama/version.py << EOF
+          """Version information for ollama_server."""
+          
           __version__ = "$VERSION"
           __build_date__ = "$BUILD_DATE"
           EOF
