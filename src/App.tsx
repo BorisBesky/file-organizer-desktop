@@ -90,6 +90,9 @@ export default function App() {
   // Track if we've already attempted to start the server to prevent duplicates
   const serverStartAttempted = useRef(false);
   
+  // Track if this is the initial mount to prevent clearing saved state on mount
+  const isInitialMount = useRef(true);
+  
   // Managed LLM state
   const [managedLLMConfig, setManagedLLMConfig] = useState<ManagedLLMConfig>(() => {
     try {
@@ -135,10 +138,6 @@ export default function App() {
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [showOptimizationResult, setShowOptimizationResult] = useState(false);
   const optimizationCancelRef = useRef(false);
-  
-  // Saved session state
-  const [savedSessionAvailable, setSavedSessionAvailable] = useState(false);
-  const [showSessionNotification, setShowSessionNotification] = useState(false);
   
   // Sorting state
   const [sortBy, setSortBy] = useState<SortField>('source');
@@ -261,11 +260,18 @@ export default function App() {
 
   // Auto-save processed state when scan completes or stops
   useEffect(() => {
+    // Skip on initial mount to allow saved state to be restored first
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+    
     if ((scanState === 'completed' || scanState === 'stopped') && rows.length > 0) {
       saveProcessedState();
     }
     // Clear saved state when scan is reset to idle with no rows
     if (scanState === 'idle' && rows.length === 0) {
+      debugLogger.info('APP_STATE', 'Clearing saved state (idle with no rows)', { scanState, rowCount: rows.length });
       clearProcessedState();
     }
   }, [scanState, rows]);
@@ -393,30 +399,25 @@ export default function App() {
     };
   }, []);
 
-  // Check for saved session on mount
+  // Check for saved session on mount and auto-restore
   useEffect(() => {
+    debugLogger.info('APP_INIT', 'Checking for saved session on mount', {});
     const savedState = loadProcessedState();
-    if (savedState && savedState.rows.length > 0) {
-      setSavedSessionAvailable(true);
-      setShowSessionNotification(true);
+    if (savedState) {
+      if (savedState.rows.length > 0) {
+        debugLogger.info('APP_INIT', 'Auto-restoring saved session', { 
+          rowCount: savedState.rows.length,
+          directories: savedState.directories || []
+        });
+        restoreProcessedState(savedState);
+      } else {
+        debugLogger.info('APP_INIT', 'Saved session found but has no rows', {});
+      }
+    } else {
+      debugLogger.info('APP_INIT', 'No saved session found', {});
     }
   }, []);
 
-    // Auto-restore when user picks directories matching the saved session
-  useEffect(() => {
-    if (directories.length === 0 || rows.length > 0) return; // avoid overwriting active state
-    const savedState = loadProcessedState();
-    if (savedState && savedState.rows.length > 0) {
-      // Check if the selected directories match the saved ones
-      const savedDirs = savedState.directories || (savedState.directory ? [savedState.directory] : []);
-      const directoriesMatch = JSON.stringify(savedDirs.sort()) === JSON.stringify(directories.sort());
-      if (directoriesMatch) {
-        restoreProcessedState(savedState);
-        setSavedSessionAvailable(false);
-        setShowSessionNotification(false);
-      }
-    }
-  }, [directories]); // runs when directories change
 
   const pickDirectory = async () => {
     try {
@@ -749,8 +750,6 @@ export default function App() {
 
     // Clear saved state when starting a new scan
     clearProcessedState();
-    setSavedSessionAvailable(false);
-    setShowSessionNotification(false);
 
     setBusy(true);
     setScanState('scanning');
@@ -956,8 +955,6 @@ export default function App() {
     setOptimizedCategories({ categories: new Set(), count: 0, total: 0 });
     setShowOptimizationResult(false);
     clearProcessedState(); // Clear saved state when resetting
-    setSavedSessionAvailable(false);
-    setShowSessionNotification(false);
     scanControlRef.current = {
       shouldStop: false,
       currentFileIndex: 0,

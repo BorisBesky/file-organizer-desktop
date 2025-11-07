@@ -141,6 +141,29 @@ fn kill_process_by_pid(pid: u32) -> Result<(), String> {
     }
 }
 
+#[cfg(target_os = "windows")]
+fn kill_process_by_name(process_name: &str) -> Result<(), String> {
+    eprintln!("Killing all processes with name: {}", process_name);
+    let output = std::process::Command::new("taskkill")
+        .args(&["/F", "/IM", process_name])
+        .output()
+        .map_err(|e| format!("Failed to execute taskkill: {}", e))?;
+    
+    if output.status.success() {
+        eprintln!("Successfully killed processes named {}", process_name);
+        Ok(())
+    } else {
+        // Don't treat as error if process not found
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if stderr.contains("not found") {
+            eprintln!("No processes found with name {}", process_name);
+            Ok(())
+        } else {
+            Err(format!("Failed to kill process: {}", stderr))
+        }
+    }
+}
+
 #[cfg(unix)]
 fn kill_process_by_pid(pid: u32) -> Result<(), String> {
     eprintln!("Killing process with PID: {}", pid);
@@ -1001,6 +1024,16 @@ async fn start_llm_server(
         cmd.arg("--model-path").arg(model_path);
     }
 
+    // Configure process creation for proper cleanup on Windows
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        // CREATE_NEW_PROCESS_GROUP (0x00000200) - allows us to kill the process tree
+        // CREATE_NO_WINDOW (0x08000000) - prevents console window from appearing
+        const CREATE_NEW_PROCESS_GROUP: u32 = 0x00000200;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        cmd.creation_flags(CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW);
+    }
 
     // Start the server process
     eprintln!("Starting server with command: {:?}", server_exe);
@@ -1090,42 +1123,55 @@ async fn stop_llm_server(app: AppHandle, state: State<'_, ManagedLLMState>) -> R
         let pid = process_info.pid;
         eprintln!("Found server process with PID: {}", pid);
         
-        // Try to kill via Child handle first (if we have it)
-        let result = if let Some(mut child) = child_opt {
-            eprintln!("Killing via Child handle");
-            match child.kill() {
-                Ok(_) => {
-                    eprintln!("Kill signal sent to PID: {}", pid);
-                    let _ = child.wait(); // Wait for process to actually terminate
-                    eprintln!("Server process terminated");
-                    
-                    // On Windows, also kill the process tree using taskkill
-                    #[cfg(target_os = "windows")]
-                    {
-                        let _ = std::process::Command::new("taskkill")
-                            .args(&["/F", "/T", "/PID", &pid.to_string()])
-                            .output();
-                        eprintln!("Sent taskkill command to terminate process tree");
+        // On Windows, use taskkill to forcefully terminate the process tree first
+        #[cfg(target_os = "windows")]
+        {
+            eprintln!("Using taskkill to terminate process tree for PID: {}", pid);
+            let output = std::process::Command::new("taskkill")
+                .args(&["/F", "/T", "/PID", &pid.to_string()])
+                .output();
+            
+            match output {
+                Ok(output) => {
+                    if output.status.success() {
+                        eprintln!("Successfully killed process tree with taskkill");
+                    } else {
+                        eprintln!("Taskkill failed: {}", String::from_utf8_lossy(&output.stderr));
                     }
-                    
-                    Ok("Server stopped".to_string())
                 }
                 Err(e) => {
-                    eprintln!("Failed to kill server process via Child handle: {}", e);
-                    Err(format!("Failed to stop server: {}", e))
+                    eprintln!("Failed to execute taskkill: {}", e);
                 }
             }
+            
+            // Give the process a moment to terminate
+            std::thread::sleep(std::time::Duration::from_millis(500));
+        }
+        
+        // Also try to kill via Child handle (if we have it)
+        if let Some(mut child) = child_opt {
+            eprintln!("Also killing via Child handle");
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+        
+        // On Unix systems, kill by PID
+        #[cfg(unix)]
+        {
+            let _ = kill_process_by_pid(pid);
+        }
+        
+        // Verify the process is actually dead
+        if is_process_running(pid) {
+            eprintln!("Warning: Process {} may still be running after kill attempt", pid);
         } else {
-            // Orphaned process - kill by PID
-            eprintln!("No Child handle, killing orphaned process by PID");
-            kill_process_by_pid(pid)?;
-            Ok("Orphaned server stopped".to_string())
-        };
+            eprintln!("Confirmed: Process {} has terminated", pid);
+        }
         
         // Clean up PID file
         remove_pid_file(&app_data_dir);
         
-        result
+        Ok("Server stopped".to_string())
     } else {
         eprintln!("No server process found in state");
         Ok("Server was not running".to_string())
@@ -1245,20 +1291,24 @@ fn main() {
                     let pid = process_info.pid;
                     eprintln!("Stopping LLM server with PID: {}", pid);
                     
-                    // Kill via Child handle if available, otherwise by PID
+                    // On Windows, use taskkill first for forceful termination
+                    #[cfg(target_os = "windows")]
+                    {
+                        let _ = kill_process_by_pid(pid);
+                        // Brief wait to ensure termination
+                        std::thread::sleep(std::time::Duration::from_millis(300));
+                    }
+                    
+                    // Also kill via Child handle if available
                     if let Some(mut child) = child_opt {
                         let _ = child.kill();
                         let _ = child.wait();
-                    } else {
-                        let _ = kill_process_by_pid(pid);
                     }
                     
-                    // On Windows, also kill the process tree
-                    #[cfg(target_os = "windows")]
+                    // On Unix, kill by PID
+                    #[cfg(unix)]
                     {
-                        let _ = std::process::Command::new("taskkill")
-                            .args(&["/F", "/T", "/PID", &pid.to_string()])
-                            .output();
+                        let _ = kill_process_by_pid(pid);
                     }
                     
                     // Clean up PID file
@@ -1269,6 +1319,13 @@ fn main() {
                     eprintln!("LLM server stopped on app exit");
                 } else {
                     eprintln!("No LLM server was running on exit");
+                }
+                
+                // Final safety measure: kill any remaining ollama_server.exe processes by name
+                #[cfg(target_os = "windows")]
+                {
+                    eprintln!("Final cleanup: killing any remaining ollama_server.exe processes");
+                    let _ = kill_process_by_name("ollama_server.exe");
                 }
             }
         })
