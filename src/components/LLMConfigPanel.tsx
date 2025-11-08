@@ -85,12 +85,14 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled, pro
 
   const currentProviderInfo = PROVIDER_INFO[config.provider];
   const defaultModel = (navigator.userAgent.includes('Mac') ? 'mlx-community/Phi-3.5-mini-instruct-4bit' : 'MaziyarPanahi/gemma-3-1b-it-GGUF');
+  const defaultModelFilename = (navigator.userAgent.includes('Mac') ? 'Phi-3.5-mini-instruct-4bit.gguf' : 'gemma-3-1b-it-GGUF.gguf');
 
   // Initialize managed LLM config if not provided
   const defaultManagedConfig: ManagedLLMConfig = {
     port: 8000,
     host: '127.0.0.1',
     model: defaultModel,
+    model_filename: defaultModelFilename,
     log_level: 'info',
     env_vars: {}
   };
@@ -633,6 +635,23 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled, pro
                       Hugging Face model ID to download automatically
                     </div>
                   </div>
+
+                  <div className="config-section">
+                    <label className="config-label">
+                      Model Filename
+                      <input
+                        type="text"
+                        className="config-input"
+                        value={currentManagedConfig.model_filename || ''}
+                        onChange={(e) => updateManagedConfig({ model_filename: e.target.value || undefined })}
+                        placeholder={`e.g., ${defaultModelFilename}`}
+                        disabled={disabled}
+                      />
+                    </label>
+                    <div className="config-hint">
+                      Hugging Face model filename to download automatically
+                    </div>
+                  </div>                  
 
                   <div className="config-section">
                     <label className="config-label">

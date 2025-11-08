@@ -86,6 +86,7 @@ export default function App() {
   const [llmConfig, setLlmConfig] = useState<LLMConfig>(loadLlmConfig());
   const [providerConfigs, setProviderConfigs] = useState<Record<string, LLMConfig>>(loadProviderConfigs());
   const defaultModel = (navigator.userAgent.includes('Mac') ? 'mlx-community/Phi-3.5-mini-instruct-4bit' : 'MaziyarPanahi/gemma-3-1b-it-GGUF');
+  const defaultModelFilename = (navigator.userAgent.includes('Mac') ? 'Phi-3.5-mini-instruct-4bit.mlx' : 'gemma-3-1b-it-GGUF.gguf');
   
   // Track if we've already attempted to start the server to prevent duplicates
   const serverStartAttempted = useRef(false);
@@ -104,9 +105,10 @@ export default function App() {
           port: config.port || 8000,
           host: config.host || '127.0.0.1',
           model: config.model || defaultModel,
-          log_level: config.log_level || config.logLevel || 'info', // Support both old and new field names
+          model_filename: config.model_filename || defaultModelFilename,
+          log_level: config.log_level || 'info', // Support both old and new field names
           model_path: config.model_path || config.modelPath,
-          env_vars: config.env_vars || config.envVars || {}
+          env_vars: config.env_vars || {}
         };
         return migratedConfig;
       }
@@ -117,6 +119,7 @@ export default function App() {
       port: 8000,
       host: '127.0.0.1',
       model: defaultModel,
+      model_filename: defaultModelFilename,
       log_level: 'info',
       env_vars: {}
     };
@@ -1079,14 +1082,71 @@ export default function App() {
     return (savedTheme === 'dark' || savedTheme === 'light') ? savedTheme : 'light';
   });
 
+  const [fontSizeMultiplier, setFontSizeMultiplier] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('fontSizeMultiplier');
+      if (saved) {
+        const parsed = parseFloat(saved);
+        // Clamp between 0.5 and 2.0 for reasonable bounds
+        return isNaN(parsed) ? 1.0 : Math.max(0.5, Math.min(2.0, parsed));
+      }
+    } catch (error) {
+      debugLogger.error('APP_INIT', 'Failed to load font size multiplier from localStorage', { error });
+    }
+    return 1.0;
+  });
+
   useEffect(() => {
     document.body.classList.toggle('dark-theme', theme === 'dark');
     localStorage.setItem('appTheme', theme);
   }, [theme]);
 
+  useEffect(() => {
+    // Apply font size multiplier as CSS variable
+    document.documentElement.style.setProperty('--font-size-multiplier', fontSizeMultiplier.toString());
+    localStorage.setItem('fontSizeMultiplier', fontSizeMultiplier.toString());
+  }, [fontSizeMultiplier]);
+
   const toggleTheme = () => {
     setTheme(prev => prev === 'light' ? 'dark' : 'light');
   };
+
+  const increaseFontSize = () => {
+    setFontSizeMultiplier(prev => Math.min(2.0, prev + 0.1));
+  };
+
+  const decreaseFontSize = () => {
+    setFontSizeMultiplier(prev => Math.max(0.5, prev - 0.1));
+  };
+
+  // Keyboard shortcuts for font size
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger if user is typing in an input field
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+        return;
+      }
+
+      // Check for Ctrl+Plus/Minus (Windows/Linux) or Cmd+Plus/Minus (Mac)
+      const isMac = navigator.userAgent.includes('Mac');
+      const modifierKey = isMac ? e.metaKey : e.ctrlKey;
+      
+      if (modifierKey && (e.key === '+' || e.key === '=' || e.key === '-')) {
+        e.preventDefault();
+        if (e.key === '+' || e.key === '=') {
+          setFontSizeMultiplier(prev => Math.min(2.0, prev + 0.1));
+        } else if (e.key === '-') {
+          setFontSizeMultiplier(prev => Math.max(0.5, prev - 0.1));
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
 
   return (
     <div className="app-layout">
