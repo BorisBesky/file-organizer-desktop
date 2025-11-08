@@ -768,9 +768,13 @@ fn is_vulkan_available() -> bool {
 fn is_vulkan_available() -> bool {
     use std::process::Command;
 
-    let output = Command::new("vulkaninfo")
-        .output()
-        .map_err(|e| format!("Failed to run vulkaninfo: {}", e))?;
+    let output = match Command::new("vulkaninfo").output() {
+        Ok(output) => output,
+        Err(e) => {
+            eprintln!("Failed to run vulkaninfo: {}", e);
+            return false;
+        }
+    };
     if output.status.success() {
         eprintln!("Vulkan runtime detected");
         return true;
