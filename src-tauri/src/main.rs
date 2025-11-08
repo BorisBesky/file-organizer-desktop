@@ -642,9 +642,9 @@ async fn get_llm_server_status(app: AppHandle, state: State<'_, ManagedLLMState>
     // Try multiple possible locations for the server executable
     let possible_paths = if cfg!(target_os = "windows") {
         vec![
-            server_dir.join("ollama_server").join("ollama_server.exe"),
-            server_dir.join("ollama_server.exe"),
-            server_dir.join("ollama_server").join("ollama_server").join("ollama_server.exe"),
+            server_dir.join("llama_server").join("llama_server.exe"),
+            server_dir.join("llama_server.exe"),
+            server_dir.join("llama_server").join("llama_server").join("llama_server.exe"),
         ]
     } else if cfg!(target_os = "macos") {
         vec![
@@ -654,9 +654,9 @@ async fn get_llm_server_status(app: AppHandle, state: State<'_, ManagedLLMState>
         ]
     } else {
         vec![
-            server_dir.join("ollama_server").join("ollama_server"),
-            server_dir.join("ollama_server"),
-            server_dir.join("ollama_server").join("ollama_server").join("ollama_server"),
+            server_dir.join("llama_server").join("llama_server"),
+            server_dir.join("llama_server"),
+            server_dir.join("llama_server").join("llama_server").join("llama_server"),
         ]
     };
     
@@ -798,20 +798,20 @@ async fn download_llm_server(app: AppHandle, version: String) -> Result<String, 
         // Check if Vulkan is available for Windows
         if is_vulkan_available() {
             eprintln!("Using Vulkan-enabled server");
-            ("ollama_server-windows-vulkan.zip", "ollama_server")
+            ("llama_server-windows-vulkan.zip", "llama_server")
         } else {
             eprintln!("Using CPU-only server (Vulkan not available)");
-            ("ollama_server-windows-cpu.zip", "ollama_server")
+            ("llama_server-windows-cpu.zip", "llama_server")
         }
     } else if cfg!(target_os = "macos") {
         ("mlx_server-macos.tar.gz", "mlx_server")
     } else {
         if is_vulkan_available() {
             eprintln!("Using Vulkan-enabled server");
-            ("ollama_server-linux-vulkan.tar.gz", "ollama_server")
+            ("llama_server-linux-vulkan.tar.gz", "llama_server")
         } else {
             eprintln!("Using CPU-only server (Vulkan not available)");
-            ("ollama_server-linux-cpu.tar.gz", "ollama_server")
+            ("llama_server-linux-cpu.tar.gz", "llama_server")
         }
     };
 
@@ -913,7 +913,7 @@ async fn download_llm_server(app: AppHandle, version: String) -> Result<String, 
         let server_exe = if cfg!(target_os = "macos") {
             extract_path.join("mlx_server")
         } else {
-            extract_path.join("ollama_server")
+            extract_path.join("llama_server")
         };
         
         use std::os::unix::fs::PermissionsExt;
@@ -945,11 +945,11 @@ async fn start_llm_server(
     
     let server_dir = app_data_dir.join("llm-server");
     let server_exe = if cfg!(target_os = "windows") {
-        server_dir.join("ollama_server").join("ollama_server").join("ollama_server.exe")
+        server_dir.join("llama_server").join("llama_server").join("llama_server.exe")
     } else if cfg!(target_os = "macos") {
         server_dir.join("mlx_server").join("mlx_server")
     } else {
-        server_dir.join("ollama_server").join("ollama_server")
+        server_dir.join("llama_server").join("llama_server")
     };
 
     if !server_exe.exists() {
@@ -1268,11 +1268,11 @@ fn main() {
                     eprintln!("No LLM server was running on exit");
                 }
                 
-                // Final safety measure: kill any remaining ollama_server.exe processes by name
+                // Final safety measure: kill any remaining llama_server.exe processes by name
                 #[cfg(target_os = "windows")]
                 {
-                    eprintln!("Final cleanup: killing any remaining ollama_server.exe processes");
-                    let _ = kill_process_by_name("ollama_server.exe");
+                    eprintln!("Final cleanup: killing any remaining llama_server.exe processes");
+                    let _ = kill_process_by_name("llama_server.exe");
                 }
             }
         })

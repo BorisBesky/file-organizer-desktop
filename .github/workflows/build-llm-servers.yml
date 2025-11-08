@@ -50,7 +50,7 @@ jobs:
           BUILD_DATE=$(date +%Y-%m-%d)
           echo "Updating version to $VERSION (build date: $BUILD_DATE)"
           cat > llm-server/windows/ollama/version.py << EOF
-          """Version information for ollama_server."""
+          """Version information for llama_server."""
           
           __version__ = "$VERSION"
           __build_date__ = "$BUILD_DATE"
@@ -59,19 +59,19 @@ jobs:
       - name: Build with PyInstaller
         working-directory: llm-server/windows/ollama
         run: |
-          pyinstaller ollama_server.spec
+          pyinstaller llama_server.spec
           mv dist dist-cpu
       
       - name: Package artifact
         working-directory: llm-server/windows/ollama/dist-cpu
         run: |
-          Compress-Archive -Path ollama_server -DestinationPath ollama_server-windows-cpu.zip
+          Compress-Archive -Path llama_server -DestinationPath llama_server-windows-cpu.zip
       
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ollama-server-windows-cpu
-          path: llm-server/windows/ollama/dist-cpu/ollama_server-windows-cpu.zip
+          name: llama-server-windows-cpu
+          path: llm-server/windows/ollama/dist-cpu/llama_server-windows-cpu.zip
           retention-days: 30
 
   build-windows-ollama-vulkan:
@@ -105,7 +105,7 @@ jobs:
           BUILD_DATE=$(date +%Y-%m-%d)
           echo "Updating version to $VERSION (build date: $BUILD_DATE)"
           cat > llm-server/windows/ollama/version.py << EOF
-          """Version information for ollama_server."""
+          """Version information for llama_server."""
           
           __version__ = "$VERSION"
           __build_date__ = "$BUILD_DATE"
@@ -114,19 +114,19 @@ jobs:
       - name: Build with PyInstaller
         working-directory: llm-server/windows/ollama
         run: |
-          pyinstaller ollama_server.spec
+          pyinstaller llama_server.spec
           mv dist dist-vulkan
       
       - name: Package artifact
         working-directory: llm-server/windows/ollama/dist-vulkan
         run: |
-          Compress-Archive -Path ollama_server -DestinationPath ollama_server-windows-vulkan.zip
+          Compress-Archive -Path llama_server -DestinationPath llama_server-windows-vulkan.zip
       
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ollama-server-windows-vulkan
-          path: llm-server/windows/ollama/dist-vulkan/ollama_server-windows-vulkan.zip
+          name: llama-server-windows-vulkan
+          path: llm-server/windows/ollama/dist-vulkan/llama_server-windows-vulkan.zip
           retention-days: 30
 
   build-linux-ollama:
@@ -159,7 +159,7 @@ jobs:
           BUILD_DATE=$(date +%Y-%m-%d)
           echo "Updating version to $VERSION (build date: $BUILD_DATE)"
           cat > llm-server/windows/ollama/version.py << EOF
-          """Version information for ollama_server."""
+          """Version information for llama_server."""
           
           __version__ = "$VERSION"
           __build_date__ = "$BUILD_DATE"
@@ -167,18 +167,18 @@ jobs:
       
       - name: Build with PyInstaller
         working-directory: llm-server/linux/ollama
-        run: pyinstaller ollama_server.spec
+        run: pyinstaller llama_server.spec
       
       - name: Package artifact
         working-directory: llm-server/linux/ollama/dist
         run: |
-          tar -czf ollama_server-linux-cpu.tar.gz ollama_server
+          tar -czf llama_server-linux-cpu.tar.gz llama_server
       
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ollama-server-linux
-          path: llm-server/linux/ollama/dist/ollama_server-linux-cpu.tar.gz
+          name: llama-server-linux
+          path: llm-server/linux/ollama/dist/llama_server-linux-cpu.tar.gz
           retention-days: 30
 
   build-linux-ollama-vulkan:
@@ -211,7 +211,7 @@ jobs:
           BUILD_DATE=$(date +%Y-%m-%d)
           echo "Updating version to $VERSION (build date: $BUILD_DATE)"
           cat > llm-server/linux/ollama/version.py << EOF
-          """Version information for ollama_server."""
+          """Version information for llama_server."""
           
           __version__ = "$VERSION"
           __build_date__ = "$BUILD_DATE"
@@ -220,19 +220,19 @@ jobs:
       - name: Build with PyInstaller
         working-directory: llm-server/linux/ollama
         run: |
-          pyinstaller ollama_server.spec
+          pyinstaller llama_server.spec
           mv dist dist-vulkan
       
       - name: Package artifact
         working-directory: llm-server/linux/ollama/dist-vulkan
         run: |
-          tar -czf ollama_server-linux-vulkan.tar.gz ollama_server
+          tar -czf llama_server-linux-vulkan.tar.gz llama_server
       
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ollama-server-linux-vulkan
-          path: llm-server/linux/ollama/dist-vulkan/ollama_server-linux-vulkan.tar.gz
+          name: llama-server-linux-vulkan
+          path: llm-server/linux/ollama/dist-vulkan/llama_server-linux-vulkan.tar.gz
           retention-days: 30
 
   build-macos-mlx:
@@ -327,10 +327,10 @@ jobs:
           tag_name: ${{ steps.release_meta.outputs.tag_name }}
           name: ${{ steps.release_meta.outputs.release_name }}
           files: |
-            artifacts/ollama-server-windows-cpu/ollama_server-windows-cpu.zip
-            artifacts/ollama-server-windows-vulkan/ollama_server-windows-vulkan.zip
-            artifacts/ollama-server-linux/ollama_server-linux.tar.gz
-            artifacts/ollama-server-linux-vulkan/ollama_server-linux-vulkan.tar.gz
+            artifacts/llama-server-windows-cpu/llama_server-windows-cpu.zip
+            artifacts/llama-server-windows-vulkan/llama_server-windows-vulkan.zip
+            artifacts/llama-server-linux/llama_server-linux-cpu.tar.gz
+            artifacts/llama-server-linux-vulkan/llama_server-linux-vulkan.tar.gz
             artifacts/mlx-server-macos/mlx_server-macos.tar.gz
           draft: ${{ steps.release_meta.outputs.draft }}
           prerelease: false

@@ -61,7 +61,7 @@ Environment variables (overridden by command-line arguments):
     parser.add_argument(
         '--version', '-v',
         action='version',
-        version=f'ollama_server version {__version__} (build date: {__build_date__})'
+        version=f'llama_server version {__version__} (build date: {__build_date__})'
     )
     
     parser.add_argument(
@@ -203,7 +203,7 @@ async def list_models():
 
 if __name__ == "__main__":
     # Log version on startup
-    print(f"Starting ollama_server v{__version__} (build date: {__build_date__})")
+    print(f"Starting llama_server v{__version__} (build date: {__build_date__})")
     print(f"Server configuration:")
     print(f"  Model: {model_path}")
     print(f"  Host: {hostname}")

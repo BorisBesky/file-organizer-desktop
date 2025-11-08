@@ -1,4 +1,4 @@
-# Core dependencies for ollama_server.py
+# Core dependencies for llama_server.py
 fastapi>=0.104.0
 uvicorn[standard]>=0.24.0
 pydantic>=2.0.0

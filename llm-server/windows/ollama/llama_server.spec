@@ -6,7 +6,7 @@ from PyInstaller.utils.hooks import collect_dynamic_libs
 llama_binaries = collect_dynamic_libs('llama_cpp', destdir='llama_cpp/lib')
 
 a = Analysis(
-    ['ollama_server.py'],
+    ['llama_server.py'],
     pathex=[],
     binaries=llama_binaries,
     datas=[('version.py', '.')],
@@ -34,7 +34,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='ollama_server',
+    name='llama_server',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -53,6 +53,5 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name='ollama_server',
+    name='llama_server',
 )
-
