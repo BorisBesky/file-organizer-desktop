@@ -598,267 +598,6 @@ async fn pick_directories_native() -> Result<Vec<String>, String> {
     Ok(paths)
 }
 
-#[cfg(target_os = "windows")]
-async fn pick_directories_native() -> Result<Vec<String>, String> {
-    use std::process::Command;
-    
-    let script = r#"
-        Add-Type -AssemblyName System.Windows.Forms
-        
-        # Use Windows Shell IFileDialog COM interface for modern folder picker with multi-select
-        $code = @"
-using System;
-using System.Runtime.InteropServices;
-using System.Collections.Generic;
-
-public class FolderPicker
-{
-    [ComImport]
-    [Guid("42f85136-db7e-439c-85f1-e4075d135fc8")]
-    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-    interface IFileOpenDialog
-    {
-        [PreserveSig] int Show([In] IntPtr parent);
-        void SetFileTypes([In] uint cFileTypes, [In] IntPtr rgFilterSpec);
-        void SetFileTypeIndex([In] uint iFileType);
-        void GetFileTypeIndex(out uint piFileType);
-        void Advise([In, MarshalAs(UnmanagedType.Interface)] IntPtr pfde, out uint pdwCookie);
-        void Unadvise([In] uint dwCookie);
-        void SetOptions([In] uint fos);
-        void GetOptions(out uint pfos);
-        void SetDefaultFolder([In, MarshalAs(UnmanagedType.Interface)] IShellItem psi);
-        void SetFolder([In, MarshalAs(UnmanagedType.Interface)] IShellItem psi);
-        void GetFolder([MarshalAs(UnmanagedType.Interface)] out IShellItem ppsi);
-        void GetCurrentSelection([MarshalAs(UnmanagedType.Interface)] out IShellItem ppsi);
-        void SetFileName([In, MarshalAs(UnmanagedType.LPWStr)] string pszName);
-        void GetFileName([MarshalAs(UnmanagedType.LPWStr)] out string pszName);
-        void SetTitle([In, MarshalAs(UnmanagedType.LPWStr)] string pszTitle);
-        void SetOkButtonLabel([In, MarshalAs(UnmanagedType.LPWStr)] string pszText);
-        void SetFileNameLabel([In, MarshalAs(UnmanagedType.LPWStr)] string pszLabel);
-        void GetResult([MarshalAs(UnmanagedType.Interface)] out IShellItem ppsi);
-        void AddPlace([In, MarshalAs(UnmanagedType.Interface)] IShellItem psi, int fdap);
-        void SetDefaultExtension([In, MarshalAs(UnmanagedType.LPWStr)] string pszDefaultExtension);
-        void Close([MarshalAs(UnmanagedType.Error)] int hr);
-        void SetClientGuid([In] ref Guid guid);
-        void ClearClientData();
-        void SetFilter([MarshalAs(UnmanagedType.Interface)] IntPtr pFilter);
-        void GetResults([MarshalAs(UnmanagedType.Interface)] out IShellItemArray ppenum);
-        void GetSelectedItems([MarshalAs(UnmanagedType.Interface)] out IShellItemArray ppsai);
-    }
-    
-    [ComImport]
-    [Guid("43826d1e-e718-42ee-bc55-a1e261c37bfe")]
-    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-    interface IShellItem
-    {
-        void BindToHandler([In, MarshalAs(UnmanagedType.Interface)] IntPtr pbc, [In] ref Guid bhid, [In] ref Guid riid, out IntPtr ppv);
-        void GetParent([MarshalAs(UnmanagedType.Interface)] out IShellItem ppsi);
-        void GetDisplayName([In] uint sigdnName, [MarshalAs(UnmanagedType.LPWStr)] out string ppszName);
-        void GetAttributes([In] uint sfgaoMask, out uint psfgaoAttribs);
-        void Compare([In, MarshalAs(UnmanagedType.Interface)] IShellItem psi, [In] uint hint, out int piOrder);
-    }
-    
-    [ComImport]
-    [Guid("b63ea76d-1f85-456f-a19c-48159efa858b")]
-    [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-    interface IShellItemArray
-    {
-        void BindToHandler([In, MarshalAs(UnmanagedType.Interface)] IntPtr pbc, [In] ref Guid rbhid, [In] ref Guid riid, out IntPtr ppvOut);
-        void GetPropertyStore([In] int flags, [In] ref Guid riid, out IntPtr ppv);
-        void GetPropertyDescriptionList([In] IntPtr keyType, [In] ref Guid riid, out IntPtr ppv);
-        void GetAttributes([In] uint dwAttribFlags, [In] uint sfgaoMask, out uint psfgaoAttribs);
-        void GetCount(out uint pdwNumItems);
-        void GetItemAt([In] uint dwIndex, [MarshalAs(UnmanagedType.Interface)] out IShellItem ppsi);
-        void EnumItems([MarshalAs(UnmanagedType.Interface)] out IntPtr ppenumShellItems);
-    }
-    
-    [ComImport]
-    [Guid("DC1C5A9C-E88A-4dde-A5A1-60F82A20AEF7")]
-    class FileOpenDialog { }
-    
-    const uint FOS_PICKFOLDERS = 0x00000020;
-    const uint FOS_ALLOWMULTISELECT = 0x00000200;
-    const uint FOS_FORCEFILESYSTEM = 0x00000040;
-    const uint SIGDN_FILESYSPATH = 0x80058000;
-    const uint SIGDN_DESKTOPABSOLUTEPARSING = 0x80028000;
-    
-    public static string[] ShowFolderPicker()
-    {
-        var dialog = (IFileOpenDialog)new FileOpenDialog();
-        uint options;
-        dialog.GetOptions(out options);
-        dialog.SetOptions(options | FOS_PICKFOLDERS | FOS_ALLOWMULTISELECT | FOS_FORCEFILESYSTEM);
-        dialog.SetTitle("Select one or more folders (Ctrl+Click for multiple)");
-        
-        var result = dialog.Show(IntPtr.Zero);
-        if (result == 0)
-        {
-            var paths = new List<string>();
-            IShellItemArray results;
-            dialog.GetResults(out results);
-            if (results != null)
-            {
-                uint count;
-                results.GetCount(out count);
-                
-                for (uint i = 0; i < count; i++)
-                {
-                    IShellItem item;
-                    results.GetItemAt(i, out item);
-                    if (item == null)
-                    {
-                        continue;
-                    }
-                    string path;
-                    item.GetDisplayName(SIGDN_FILESYSPATH, out path);
-                    if (string.IsNullOrEmpty(path))
-                    {
-                        item.GetDisplayName(SIGDN_DESKTOPABSOLUTEPARSING, out path);
-                    }
-                    if (!string.IsNullOrEmpty(path))
-                    {
-                        paths.Add(path);
-                    }
-                }
-            }
-            
-            if (paths.Count == 0)
-            {
-                IShellItem singleItem;
-                dialog.GetResult(out singleItem);
-                if (singleItem != null)
-                {
-                    string path;
-                    singleItem.GetDisplayName(SIGDN_FILESYSPATH, out path);
-                    if (string.IsNullOrEmpty(path))
-                    {
-                        singleItem.GetDisplayName(SIGDN_DESKTOPABSOLUTEPARSING, out path);
-                    }
-                    if (!string.IsNullOrEmpty(path))
-                    {
-                        paths.Add(path);
-                    }
-                }
-            }
-            
-            if (paths.Count > 0)
-            {
-                return paths.ToArray();
-            }
-            return new string[0];
-        }
-        else if (result == unchecked((int)0x800704C7))
-        {
-            return new string[0];
-        }
-        else
-        {
-            Marshal.ThrowExceptionForHR(result);
-            return new string[0];
-        }
-    }
-}
-"@
-        
-        Add-Type -TypeDefinition $code
-        
-        $folders = [FolderPicker]::ShowFolderPicker()
-        foreach ($folder in $folders) {
-            Write-Output $folder
-        }
-    "#;
-    
-    let output = Command::new("powershell")
-        .arg("-NoProfile")
-        .arg("-STA")
-        .arg("-Command")
-        .arg(script)
-        .output()
-        .map_err(|e| format!("Failed to run dialog: {}", e))?;
-    
-    let stdout_str = String::from_utf8_lossy(&output.stdout);
-    let stderr_str = String::from_utf8_lossy(&output.stderr);
-    
-    if !output.status.success() {
-        // Check if there's actual error output
-        if !stderr_str.trim().is_empty() {
-            return Err(format!("PowerShell error: {}", stderr_str.trim()));
-        }
-        return Err("User cancelled folder selection".to_string());
-    }
-    
-    let paths: Vec<String> = stdout_str
-        .lines()
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
-        .collect();
-    
-    if paths.is_empty() {
-        // If no paths but there's stderr output, show it
-        if !stderr_str.trim().is_empty() {
-            return Err(format!("Error: {}", stderr_str.trim()));
-        }
-        return Err("No folders selected".to_string());
-    }
-    
-    Ok(paths)
-}
-
-#[cfg(target_os = "linux")]
-async fn pick_directories_native() -> Result<Vec<String>, String> {
-    use std::process::Command;
-    
-    // Try zenity first
-    let output = Command::new("zenity")
-        .arg("--file-selection")
-        .arg("--directory")
-        .arg("--multiple")
-        .arg("--separator=\n")
-        .arg("--title=Select one or more folders")
-        .output();
-    
-    if let Ok(output) = output {
-        if output.status.success() {
-            let output_str = String::from_utf8_lossy(&output.stdout);
-            let paths: Vec<String> = output_str
-                .lines()
-                .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty())
-                .collect();
-            
-            if !paths.is_empty() {
-                return Ok(paths);
-            }
-        }
-    }
-    
-    // Try kdialog as fallback
-    let output = Command::new("kdialog")
-        .arg("--getexistingdirectory")
-        .arg("--multiple")
-        .arg("--separate-output")
-        .arg("--title")
-        .arg("Select one or more folders")
-        .output();
-    
-    if let Ok(output) = output {
-        if output.status.success() {
-            let output_str = String::from_utf8_lossy(&output.stdout);
-            let paths: Vec<String> = output_str
-                .lines()
-                .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty())
-                .collect();
-            
-            if !paths.is_empty() {
-                return Ok(paths);
-            }
-        }
-    }
-    
-    Err("No suitable dialog found. Please install zenity or kdialog.".to_string())
-}
-
 #[tauri::command]
 async fn open_file(path: String) -> Result<(), String> {
     use std::process::Command;
@@ -1025,10 +764,21 @@ fn is_vulkan_available() -> bool {
     false
 }
 
-#[cfg(not(target_os = "windows"))]
+#[cfg(target_os = "linux")]
 fn is_vulkan_available() -> bool {
-    false
+    use std::process::Command;
+
+    let output = Command::new("vulkaninfo")
+        .output()
+        .map_err(|e| format!("Failed to run vulkaninfo: {}", e))?;
+    if output.status.success() {
+        eprintln!("Vulkan runtime detected");
+        return true;
+    }
+    eprintln!("Vulkan runtime not found");
+    return false;
 }
+
 
 #[command]
 async fn download_llm_server(app: AppHandle, version: String) -> Result<String, String> {
@@ -1052,7 +802,13 @@ async fn download_llm_server(app: AppHandle, version: String) -> Result<String, 
     } else if cfg!(target_os = "macos") {
         ("mlx_server-macos.tar.gz", "mlx_server")
     } else {
-        ("ollama_server-linux.tar.gz", "ollama_server")
+        if is_vulkan_available() {
+            eprintln!("Using Vulkan-enabled server");
+            ("ollama_server-linux-vulkan.tar.gz", "ollama_server")
+        } else {
+            eprintln!("Using CPU-only server (Vulkan not available)");
+            ("ollama_server-linux.tar.gz", "ollama_server")
+        }
     };
 
     let download_url = format!(

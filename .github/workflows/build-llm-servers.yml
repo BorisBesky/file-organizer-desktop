@@ -181,6 +181,60 @@ jobs:
           path: llm-server/linux/ollama/dist/ollama_server-linux.tar.gz
           retention-days: 30
 
+  build-linux-ollama-vulkan:
+    runs-on: ubuntu-22.04
+    if: |
+      github.event_name == 'push' || 
+      contains(github.event.inputs.platforms, 'all') || 
+      contains(github.event.inputs.platforms, 'linux')
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+          pip install https://github.com/BorisBesky/file-organizer-desktop/releases/download/v0.3.16/llama_cpp_python-0.3.16+vulkan-cp312-cp312-linux_x86_64.whl
+          pip install fastapi uvicorn pydantic huggingface-hub
+      
+      - name: Update version if manually triggered
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          BUILD_DATE=$(date +%Y-%m-%d)
+          echo "Updating version to $VERSION (build date: $BUILD_DATE)"
+          cat > llm-server/linux/ollama/version.py << EOF
+          """Version information for ollama_server."""
+          
+          __version__ = "$VERSION"
+          __build_date__ = "$BUILD_DATE"
+          EOF
+      
+      - name: Build with PyInstaller
+        working-directory: llm-server/linux/ollama
+        run: |
+          pyinstaller ollama_server.spec
+          mv dist dist-vulkan
+      
+      - name: Package artifact
+        working-directory: llm-server/linux/ollama/dist-vulkan
+        run: |
+          tar -czf ollama_server-linux-vulkan.tar.gz ollama_server
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ollama-server-linux-vulkan
+          path: llm-server/linux/ollama/dist-vulkan/ollama_server-linux-vulkan.tar.gz
+          retention-days: 30
+
   build-macos-mlx:
     runs-on: macos-latest
     if: |
