@@ -288,7 +288,7 @@ jobs:
           retention-days: 30
 
   create-release:
-    needs: [build-windows-ollama, build-windows-ollama-vulkan, build-linux-ollama, build-macos-mlx]
+    needs: [build-windows-ollama, build-windows-ollama-vulkan, build-linux-ollama, build-linux-ollama-vulkan, build-macos-mlx]
     runs-on: ubuntu-latest
     if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/llm-v')
     permissions:
@@ -330,6 +330,7 @@ jobs:
             artifacts/ollama-server-windows-cpu/ollama_server-windows-cpu.zip
             artifacts/ollama-server-windows-vulkan/ollama_server-windows-vulkan.zip
             artifacts/ollama-server-linux/ollama_server-linux.tar.gz
+            artifacts/ollama-server-linux-vulkan/ollama_server-linux-vulkan.tar.gz
             artifacts/mlx-server-macos/mlx_server-macos.tar.gz
           draft: ${{ steps.release_meta.outputs.draft }}
           prerelease: false
