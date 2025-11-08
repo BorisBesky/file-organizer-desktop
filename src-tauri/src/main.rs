@@ -807,7 +807,7 @@ async fn download_llm_server(app: AppHandle, version: String) -> Result<String, 
             ("ollama_server-linux-vulkan.tar.gz", "ollama_server")
         } else {
             eprintln!("Using CPU-only server (Vulkan not available)");
-            ("ollama_server-linux.tar.gz", "ollama_server")
+            ("ollama_server-linux-cpu.tar.gz", "ollama_server")
         }
     };
 

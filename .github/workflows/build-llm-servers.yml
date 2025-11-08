@@ -172,13 +172,13 @@ jobs:
       - name: Package artifact
         working-directory: llm-server/linux/ollama/dist
         run: |
-          tar -czf ollama_server-linux.tar.gz ollama_server
+          tar -czf ollama_server-linux-cpu.tar.gz ollama_server
       
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ollama-server-linux
-          path: llm-server/linux/ollama/dist/ollama_server-linux.tar.gz
+          path: llm-server/linux/ollama/dist/ollama_server-linux-cpu.tar.gz
           retention-days: 30
 
   build-linux-ollama-vulkan:
