@@ -783,6 +783,13 @@ fn is_vulkan_available() -> bool {
     return false;
 }
 
+// Stub function for macOS - Vulkan is not used on macOS, but this function
+// needs to exist for the type checker even though it will never be called
+#[cfg(target_os = "macos")]
+fn is_vulkan_available() -> bool {
+    false
+}
+
 
 #[command]
 async fn download_llm_server(app: AppHandle, version: String) -> Result<String, String> {
