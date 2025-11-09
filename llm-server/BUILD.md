@@ -44,7 +44,7 @@ After the workflow completes, you can download:
 ### Windows Llama Server
 
 ```bash
-cd llm-server/windows/ollama
+cd llm-server/windows/llama
 pip install pyinstaller llama-cpp-python fastapi uvicorn pydantic huggingface-hub
 pyinstaller llama_server.spec
 ```
@@ -54,7 +54,7 @@ Output: `dist/llama_server/`
 ### Linux Llama Server
 
 ```bash
-cd llm-server/linux/ollama
+cd llm-server/linux/llama
 pip install pyinstaller llama-cpp-python fastapi uvicorn pydantic huggingface-hub
 pyinstaller llama_server.spec
 ```
@@ -77,7 +77,7 @@ Output: `dist/mlx_server/`
 
 To update the version for a new release, edit the appropriate `version.py` file:
 
-**Windows/Linux Llama**: `llm-server/windows/ollama/version.py`
+**Windows/Linux Llama**: `llm-server/windows/llama/version.py`
 ```python
 __version__ = "1.1.0"
 __build_date__ = "2025-10-14"
