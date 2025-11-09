@@ -75,6 +75,7 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled, pro
   // Managed LLM state
   const [managedLLMStatus, setManagedLLMStatus] = useState<ManagedLLMServerInfo | null>(null);
   const [showDownloadDialog, setShowDownloadDialog] = useState(false);
+  const [downloadDialogCancelled, setDownloadDialogCancelled] = useState(false);
   const [serverConfigExpanded, setServerConfigExpanded] = useState(false);
   const [envVars, setEnvVars] = useState<Array<{key: string, value: string}>>([]);
 
@@ -104,14 +105,14 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled, pro
       const status = await getManagedLLMServerStatus();
       setManagedLLMStatus(status);
       
-      // Show download dialog if not downloaded
-      if (status.status === 'not_downloaded') {
+      // Show download dialog if not downloaded and user hasn't cancelled it
+      if (status.status === 'not_downloaded' && !downloadDialogCancelled) {
         setShowDownloadDialog(true);
       }
     } catch (error) {
       debugLogger.error('MANAGED_LLM', 'Failed to load managed LLM status', { error });
     }
-  }, []);
+  }, [downloadDialogCancelled]);
 
   // Load managed LLM status when provider is managed-local and panel is expanded
   useEffect(() => {
@@ -544,7 +545,10 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled, pro
                   {managedLLMStatus?.status === 'not_downloaded' ? (
                     <button 
                       className="download-button"
-                      onClick={() => setShowDownloadDialog(true)}
+                      onClick={() => {
+                        setDownloadDialogCancelled(false);
+                        setShowDownloadDialog(true);
+                      }}
                       disabled={disabled}
                     >
                       Download Server
@@ -716,8 +720,12 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled, pro
       {/* Download Dialog */}
       <ManagedLLMDialog
         isOpen={showDownloadDialog}
-        onClose={() => setShowDownloadDialog(false)}
+        onClose={() => {
+          setShowDownloadDialog(false);
+          setDownloadDialogCancelled(true);
+        }}
         onDownloadComplete={() => {
+          setDownloadDialogCancelled(false);
           loadManagedLLMStatus();
         }}
       />
