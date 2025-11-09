@@ -177,7 +177,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: llama-server-linux
+          name: llama-server-linux-cpu
           path: llm-server/linux/ollama/dist/llama_server-linux-cpu.tar.gz
           retention-days: 30
 
