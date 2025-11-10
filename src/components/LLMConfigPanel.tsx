@@ -505,6 +505,154 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled, pro
                   />
                 </label>
               </div>
+
+              {/* Managed Local LLM Server Settings */}
+              {config.provider === 'managed-local' && managedLLMStatus?.status !== 'not_downloaded' && (
+                <>
+                  <div className="config-section">
+                    <h4 style={{ marginTop: '1rem', marginBottom: '0.5rem' }}>Managed Local LLM Server</h4>
+                  </div>
+
+                  <div className="config-section">
+                    <label className="config-label">
+                      Model
+                      <input
+                        type="text"
+                        className="config-input"
+                        value={currentManagedConfig.model || ''}
+                        onChange={(e) => {updateManagedConfig({ model: e.target.value || undefined });
+                          onChange({ ...config, model: e.target.value || '' });
+                        }}
+                        placeholder={`e.g., ${defaultModel}`}
+                        disabled={disabled}
+                      />
+                    </label>
+                    <div className="config-hint">
+                      Hugging Face model ID to download automatically
+                    </div>
+                  </div>
+
+                  <div className="config-section">
+                    <label className="config-label">
+                      Model Filename
+                      <input
+                        type="text"
+                        className="config-input"
+                        value={currentManagedConfig.model_filename || ''}
+                        onChange={(e) => updateManagedConfig({ model_filename: e.target.value || undefined })}
+                        placeholder={`e.g., ${defaultModelFilename}`}
+                        disabled={disabled}
+                      />
+                    </label>
+                    <div className="config-hint">
+                      Hugging Face model filename to download automatically
+                    </div>
+                  </div>                  
+
+                  <div className="config-section">
+                    <label className="config-label">
+                      Model Path (Optional)
+                      <input
+                        type="text"
+                        className="config-input"
+                        value={currentManagedConfig.model_path || ''}
+                        onChange={(e) => updateManagedConfig({ model_path: e.target.value || undefined })}
+                        placeholder="Path to local model file"
+                        disabled={disabled}
+                      />
+                    </label>
+                    <div className="config-hint">
+                      Override model download with local file path
+                    </div>
+                  </div>
+
+                  <div className="config-section">
+                    <label className="config-label">
+                      Log Level
+                      <select
+                        className="config-input"
+                        value={currentManagedConfig.log_level}
+                        onChange={(e) => updateManagedConfig({ log_level: e.target.value })}
+                        disabled={disabled}
+                      >
+                        <option value="debug">Debug</option>
+                        <option value="info">Info</option>
+                        <option value="warning">Warning</option>
+                        <option value="error">Error</option>
+                      </select>
+                    </label>
+                  </div>
+
+                  {/* Multi-modal Configuration */}
+                  <div className="config-section">
+                    <h4 style={{ marginTop: '1rem', marginBottom: '0.5rem' }}>Multi-Modal Support (Optional)</h4>
+                    <div className="config-hint" style={{ marginBottom: '1rem' }}>
+                      Configure multi-modal vision models to enable image analysis
+                    </div>
+                  </div>
+
+                  <div className="config-section">
+                    <label className="config-label">
+                      Chat Format
+                      <select
+                        className="config-input"
+                        value={currentManagedConfig.chat_format || ''}
+                        onChange={(e) => updateManagedConfig({ chat_format: e.target.value || undefined })}
+                        disabled={disabled}
+                      >
+                        <option value="">None (text-only model)</option>
+                        <option value="llava-1-5">LLaVA 1.5</option>
+                        <option value="llava-1-6">LLaVA 1.6</option>
+                        <option value="moondream2">Moondream2</option>
+                        <option value="llama-3-vision-alpha">Llama 3 Vision Alpha</option>
+                        <option value="minicpm-v-2.6">MiniCPM-V 2.6</option>
+                        <option value="qwen2.5-vl">Qwen2.5-VL</option>
+                      </select>
+                    </label>
+                    <div className="config-hint">
+                      Select the chat format for your multi-modal model
+                    </div>
+                  </div>
+
+                  {currentManagedConfig.chat_format && (
+                    <>
+                      <div className="config-section">
+                        <label className="config-label">
+                          MMProj Repo ID
+                          <input
+                            type="text"
+                            className="config-input"
+                            value={currentManagedConfig.mmproj_repo_id || ''}
+                            onChange={(e) => updateManagedConfig({ mmproj_repo_id: e.target.value || undefined })}
+                            placeholder="e.g., unsloth/Qwen2.5-VL-3B-Instruct-GGUF"
+                            disabled={disabled}
+                          />
+                        </label>
+                        <div className="config-hint">
+                          Hugging Face repo ID for the multi-modal projection model
+                        </div>
+                      </div>
+
+                      <div className="config-section">
+                        <label className="config-label">
+                          MMProj Filename
+                          <input
+                            type="text"
+                            className="config-input"
+                            value={currentManagedConfig.mmproj_filename || ''}
+                            onChange={(e) => updateManagedConfig({ mmproj_filename: e.target.value || undefined })}
+                            placeholder="e.g., mmproj-F16.gguf"
+                            disabled={disabled}
+                          />
+                        </label>
+                        <div className="config-hint">
+                          Filename for the multi-modal projection model
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </>
+              )}
             </div>
           )}
 
@@ -620,77 +768,6 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled, pro
                       />
                     </label>
                   </div>
-
-                  <div className="config-section">
-                    <label className="config-label">
-                      Model
-                      <input
-                        type="text"
-                        className="config-input"
-                        value={currentManagedConfig.model || ''}
-                        onChange={(e) => {updateManagedConfig({ model: e.target.value || undefined });
-                          onChange({ ...config, model: e.target.value || '' });
-                        }}
-                        placeholder={`e.g., ${defaultModel}`}
-                        disabled={disabled}
-                      />
-                    </label>
-                    <div className="config-hint">
-                      Hugging Face model ID to download automatically
-                    </div>
-                  </div>
-
-                  <div className="config-section">
-                    <label className="config-label">
-                      Model Filename
-                      <input
-                        type="text"
-                        className="config-input"
-                        value={currentManagedConfig.model_filename || ''}
-                        onChange={(e) => updateManagedConfig({ model_filename: e.target.value || undefined })}
-                        placeholder={`e.g., ${defaultModelFilename}`}
-                        disabled={disabled}
-                      />
-                    </label>
-                    <div className="config-hint">
-                      Hugging Face model filename to download automatically
-                    </div>
-                  </div>                  
-
-                  <div className="config-section">
-                    <label className="config-label">
-                      Model Path (Optional)
-                      <input
-                        type="text"
-                        className="config-input"
-                        value={currentManagedConfig.model_path || ''}
-                        onChange={(e) => updateManagedConfig({ model_path: e.target.value || undefined })}
-                        placeholder="Path to local model file"
-                        disabled={disabled}
-                      />
-                    </label>
-                    <div className="config-hint">
-                      Override model download with local file path
-                    </div>
-                  </div>
-
-                  <div className="config-section">
-                    <label className="config-label">
-                      Log Level
-                      <select
-                        className="config-input"
-                        value={currentManagedConfig.log_level}
-                        onChange={(e) => updateManagedConfig({ log_level: e.target.value })}
-                        disabled={disabled}
-                      >
-                        <option value="debug">Debug</option>
-                        <option value="info">Info</option>
-                        <option value="warning">Warning</option>
-                        <option value="error">Error</option>
-                      </select>
-                    </label>
-                  </div>
-
                 </div>
               )}
             </>

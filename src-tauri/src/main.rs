@@ -37,9 +37,13 @@ pub struct ManagedLLMConfig {
     pub port: u16,
     pub host: String,
     pub model: Option<String>,
+    pub model_filename: Option<String>,
     pub model_path: Option<String>,
     pub log_level: String,
     pub env_vars: HashMap<String, String>,
+    pub mmproj_repo_id: Option<String>,
+    pub mmproj_filename: Option<String>,
+    pub chat_format: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -212,9 +216,13 @@ async fn try_reconnect_orphaned_server(
                     port,
                     host,
                     model: None,
+                    model_filename: None,
                     model_path: None,
                     log_level: "info".to_string(),
                     env_vars: HashMap::new(),
+                    mmproj_repo_id: None,
+                    mmproj_filename: None,
+                    chat_format: None,
                 };
                 
                 let process_info = ServerProcessInfo {
@@ -974,8 +982,22 @@ async fn start_llm_server(
     if let Some(model) = &config.model {
         cmd.arg("--model").arg(model);
     }
+    if let Some(model_filename) = &config.model_filename {
+        cmd.arg("--filename").arg(model_filename);
+    }
     if let Some(model_path) = &config.model_path {
         cmd.arg("--model-path").arg(model_path);
+    }
+    
+    // Add multi-modal arguments if specified
+    if let Some(mmproj_repo_id) = &config.mmproj_repo_id {
+        cmd.arg("--mmproj-repo-id").arg(mmproj_repo_id);
+    }
+    if let Some(mmproj_filename) = &config.mmproj_filename {
+        cmd.arg("--mmproj-filename").arg(mmproj_filename);
+    }
+    if let Some(chat_format) = &config.chat_format {
+        cmd.arg("--chat-format").arg(chat_format);
     }
 
     // Configure process creation for proper cleanup on Windows

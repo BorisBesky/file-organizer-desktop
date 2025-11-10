@@ -50,6 +50,9 @@ export interface ManagedLLMConfig {
   model_path?: string;
   log_level: string;
   env_vars: Record<string, string>;
+  mmproj_repo_id?: string;
+  mmproj_filename?: string;
+  chat_format?: string;
 }
 
 // Saved processed files state for persistence

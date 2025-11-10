@@ -108,7 +108,10 @@ export default function App() {
           model_filename: config.model_filename || defaultModelFilename,
           log_level: config.log_level || 'info', // Support both old and new field names
           model_path: config.model_path || config.modelPath,
-          env_vars: config.env_vars || {}
+          env_vars: config.env_vars || {},
+          mmproj_repo_id: config.mmproj_repo_id,
+          mmproj_filename: config.mmproj_filename,
+          chat_format: config.chat_format
         };
         return migratedConfig;
       }
@@ -311,9 +314,13 @@ export default function App() {
             port: config.port || 8000,
             host: config.host || '127.0.0.1',
             model: config.model ||  defaultModel,
+            model_filename: config.model_filename || defaultModelFilename,
             log_level: config.log_level || config.logLevel || 'info',
             model_path: config.model_path || config.modelPath,
-            env_vars: config.env_vars || config.envVars || {}
+            env_vars: config.env_vars || config.envVars || {},
+            mmproj_repo_id: config.mmproj_repo_id,
+            mmproj_filename: config.mmproj_filename,
+            chat_format: config.chat_format
           };
           setManagedLLMConfig(migratedConfig);
           // Save the migrated config immediately
@@ -684,8 +691,10 @@ export default function App() {
 
   const categoriesHint = useMemo(() => {
     const set = new Set<string>();
-    rows.forEach((r: Row) => { if (r.category) set.add(r.category); });
-    return Array.from(set);
+    rows.forEach((r: Row) => { if (r.category && r.category.toLowerCase().indexOf('uncategorized') != -1) set.add(r.category); else set.add('Uncategorized'); });
+    const hints: string[] = Array.from(set);
+    debugLogger.info('CATEGORIES_HINT', 'Categories hint', { hints });
+    return hints.length > 0 ? hints.slice(0, Math.min(hints.length, 10)) : [];
   }, [rows]);
 
   // Helper function to find which directory a file belongs to
