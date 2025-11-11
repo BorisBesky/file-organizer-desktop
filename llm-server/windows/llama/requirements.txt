@@ -1,0 +1,15 @@
+# Core dependencies for llama_server.py
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+pydantic>=2.0.0
+huggingface-hub>=0.19.0
+llama-cpp-python>=0.2.0
+
+# Optional: For better performance with llama-cpp-python
+# Uncomment if you want GPU acceleration (requires CUDA)
+# llama-cpp-python[cuda]>=0.2.0
+
+# Optional: For better performance with llama-cpp-python on Apple Silicon
+# Uncomment if running on macOS with M1/M2/M3 chips
+# llama-cpp-python[metal]>=0.2.0
+

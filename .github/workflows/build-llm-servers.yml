@@ -19,7 +19,7 @@ on:
         default: 'all'
 
 jobs:
-  build-windows-ollama:
+  build-windows-llama:
     runs-on: windows-latest
     if: |
       github.event_name == 'push' || 
@@ -49,30 +49,87 @@ jobs:
           VERSION="${{ github.event.inputs.version }}"
           BUILD_DATE=$(date +%Y-%m-%d)
           echo "Updating version to $VERSION (build date: $BUILD_DATE)"
-          cat > llm-server/windows/ollama/version.py << EOF
-          """Version information for ollama_server."""
+          cat > llm-server/windows/llama/version.py << EOF
+          """Version information for llama_server."""
           
           __version__ = "$VERSION"
           __build_date__ = "$BUILD_DATE"
           EOF
       
       - name: Build with PyInstaller
-        working-directory: llm-server/windows/ollama
-        run: pyinstaller ollama_server.spec
+        working-directory: llm-server/windows/llama
+        run: |
+          pyinstaller llama_server.spec
+          mv dist dist-cpu
       
       - name: Package artifact
-        working-directory: llm-server/windows/ollama/dist
+        working-directory: llm-server/windows/llama/dist-cpu
         run: |
-          Compress-Archive -Path ollama_server -DestinationPath ollama_server-windows.zip
+          Compress-Archive -Path llama_server -DestinationPath llama_server-windows-cpu.zip
       
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ollama-server-windows
-          path: llm-server/windows/ollama/dist/ollama_server-windows.zip
+          name: llama-server-windows-cpu
+          path: llm-server/windows/llama/dist-cpu/llama_server-windows-cpu.zip
           retention-days: 30
 
-  build-linux-ollama:
+  build-windows-llama-vulkan:
+    runs-on: windows-latest
+    if: |
+      github.event_name == 'push' || 
+      contains(github.event.inputs.platforms, 'all') || 
+      contains(github.event.inputs.platforms, 'windows')
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+          pip install https://github.com/BorisBesky/file-organizer-desktop/releases/download/v0.3.16/llama_cpp_python-0.3.16+vulkan-cp313-cp313-win_amd64.whl
+          pip install fastapi uvicorn pydantic huggingface-hub
+        
+      - name: Update version if manually triggered
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          BUILD_DATE=$(date +%Y-%m-%d)
+          echo "Updating version to $VERSION (build date: $BUILD_DATE)"
+          cat > llm-server/windows/llama/version.py << EOF
+          """Version information for llama_server."""
+          
+          __version__ = "$VERSION"
+          __build_date__ = "$BUILD_DATE"
+          EOF
+      
+      - name: Build with PyInstaller
+        working-directory: llm-server/windows/llama
+        run: |
+          pyinstaller llama_server.spec
+          mv dist dist-vulkan
+      
+      - name: Package artifact
+        working-directory: llm-server/windows/llama/dist-vulkan
+        run: |
+          Compress-Archive -Path llama_server -DestinationPath llama_server-windows-vulkan.zip
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: llama-server-windows-vulkan
+          path: llm-server/windows/llama/dist-vulkan/llama_server-windows-vulkan.zip
+          retention-days: 30
+
+  build-linux-llama:
     runs-on: ubuntu-22.04
     if: |
       github.event_name == 'push' || 
@@ -101,27 +158,81 @@ jobs:
           VERSION="${{ github.event.inputs.version }}"
           BUILD_DATE=$(date +%Y-%m-%d)
           echo "Updating version to $VERSION (build date: $BUILD_DATE)"
-          cat > llm-server/windows/ollama/version.py << EOF
-          """Version information for ollama_server."""
+          cat > llm-server/windows/llama/version.py << EOF
+          """Version information for llama_server."""
           
           __version__ = "$VERSION"
           __build_date__ = "$BUILD_DATE"
           EOF
       
       - name: Build with PyInstaller
-        working-directory: llm-server/linux/ollama
-        run: pyinstaller ollama_server.spec
+        working-directory: llm-server/linux/llama
+        run: pyinstaller llama_server.spec
       
       - name: Package artifact
-        working-directory: llm-server/linux/ollama/dist
+        working-directory: llm-server/linux/llama/dist
         run: |
-          tar -czf ollama_server-linux.tar.gz ollama_server
+          tar -czf llama_server-linux-cpu.tar.gz llama_server
       
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ollama-server-linux
-          path: llm-server/linux/ollama/dist/ollama_server-linux.tar.gz
+          name: llama-server-linux-cpu
+          path: llm-server/linux/llama/dist/llama_server-linux-cpu.tar.gz
+          retention-days: 30
+
+  build-linux-llama-vulkan:
+    runs-on: ubuntu-22.04
+    if: |
+      github.event_name == 'push' || 
+      contains(github.event.inputs.platforms, 'all') || 
+      contains(github.event.inputs.platforms, 'linux')
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyinstaller
+          pip install https://github.com/BorisBesky/file-organizer-desktop/releases/download/v0.3.16/llama_cpp_python-0.3.16+vulkan-cp312-cp312-linux_x86_64.whl
+          pip install fastapi uvicorn pydantic huggingface-hub
+      
+      - name: Update version if manually triggered
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          BUILD_DATE=$(date +%Y-%m-%d)
+          echo "Updating version to $VERSION (build date: $BUILD_DATE)"
+          cat > llm-server/linux/llama/version.py << EOF
+          """Version information for llama_server."""
+          
+          __version__ = "$VERSION"
+          __build_date__ = "$BUILD_DATE"
+          EOF
+      
+      - name: Build with PyInstaller
+        working-directory: llm-server/linux/llama
+        run: |
+          pyinstaller llama_server.spec
+          mv dist dist-vulkan
+      
+      - name: Package artifact
+        working-directory: llm-server/linux/llama/dist-vulkan
+        run: |
+          tar -czf llama_server-linux-vulkan.tar.gz llama_server
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: llama-server-linux-vulkan
+          path: llm-server/linux/llama/dist-vulkan/llama_server-linux-vulkan.tar.gz
           retention-days: 30
 
   build-macos-mlx:
@@ -177,7 +288,7 @@ jobs:
           retention-days: 30
 
   create-release:
-    needs: [build-windows-ollama, build-linux-ollama, build-macos-mlx]
+    needs: [build-windows-llama, build-windows-llama-vulkan, build-linux-llama, build-linux-llama-vulkan, build-macos-mlx]
     runs-on: ubuntu-latest
     if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/llm-v')
     permissions:
@@ -216,8 +327,10 @@ jobs:
           tag_name: ${{ steps.release_meta.outputs.tag_name }}
           name: ${{ steps.release_meta.outputs.release_name }}
           files: |
-            artifacts/ollama-server-windows/ollama_server-windows.zip
-            artifacts/ollama-server-linux/ollama_server-linux.tar.gz
+            artifacts/llama-server-windows-cpu/llama_server-windows-cpu.zip
+            artifacts/llama-server-windows-vulkan/llama_server-windows-vulkan.zip
+            artifacts/llama-server-linux/llama_server-linux-cpu.tar.gz
+            artifacts/llama-server-linux-vulkan/llama_server-linux-vulkan.tar.gz
             artifacts/mlx-server-macos/mlx_server-macos.tar.gz
           draft: ${{ steps.release_meta.outputs.draft }}
           prerelease: false

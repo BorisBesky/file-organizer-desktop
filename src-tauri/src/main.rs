@@ -37,9 +37,13 @@ pub struct ManagedLLMConfig {
     pub port: u16,
     pub host: String,
     pub model: Option<String>,
+    pub model_filename: Option<String>,
     pub model_path: Option<String>,
     pub log_level: String,
     pub env_vars: HashMap<String, String>,
+    pub mmproj_repo_id: Option<String>,
+    pub mmproj_filename: Option<String>,
+    pub chat_format: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -141,6 +145,29 @@ fn kill_process_by_pid(pid: u32) -> Result<(), String> {
     }
 }
 
+#[cfg(target_os = "windows")]
+fn kill_process_by_name(process_name: &str) -> Result<(), String> {
+    eprintln!("Killing all processes with name: {}", process_name);
+    let output = std::process::Command::new("taskkill")
+        .args(&["/F", "/IM", process_name])
+        .output()
+        .map_err(|e| format!("Failed to execute taskkill: {}", e))?;
+    
+    if output.status.success() {
+        eprintln!("Successfully killed processes named {}", process_name);
+        Ok(())
+    } else {
+        // Don't treat as error if process not found
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if stderr.contains("not found") {
+            eprintln!("No processes found with name {}", process_name);
+            Ok(())
+        } else {
+            Err(format!("Failed to kill process: {}", stderr))
+        }
+    }
+}
+
 #[cfg(unix)]
 fn kill_process_by_pid(pid: u32) -> Result<(), String> {
     eprintln!("Killing process with PID: {}", pid);
@@ -189,9 +216,13 @@ async fn try_reconnect_orphaned_server(
                     port,
                     host,
                     model: None,
+                    model_filename: None,
                     model_path: None,
                     log_level: "info".to_string(),
                     env_vars: HashMap::new(),
+                    mmproj_repo_id: None,
+                    mmproj_filename: None,
+                    chat_format: None,
                 };
                 
                 let process_info = ServerProcessInfo {
@@ -509,7 +540,36 @@ async fn move_file(from: String, to: String) -> Result<(), String> {
 
 #[tauri::command]
 async fn pick_directory(_app: AppHandle) -> Result<Vec<String>, String> {
-    pick_directories_native().await
+    use rfd::FileDialog;
+    use std::path::PathBuf;
+
+        // Open the dialog
+    let folders: Option<Vec<PathBuf>> = FileDialog::new()
+        .set_title("Select one or more directories")
+        .pick_folders();
+
+    // Handle the result
+    match folders {
+        Some(paths) => {
+            if paths.is_empty() {
+                // This case might happen if the dialog logic allows "OK" with no selection
+                eprintln!("No directories were selected.");
+                return Err("No directories selected".to_string());
+            } else {
+                eprintln!("You selected the following directories:");
+                let strs: Vec<String> = paths.iter().map(|p| p.to_string_lossy().into_owned()).collect();
+                for p in &strs {
+                    eprintln!("- {}", p);
+                }
+                return Ok(strs);
+            }
+        }
+        None => {
+            // This happens if the user presses "Cancel" or closes the dialog
+            eprintln!("Dialog was canceled. No directories selected.");
+            return Err("User cancelled folder selection".to_string());
+        }
+    }
 }
 
 #[cfg(target_os = "macos")]
@@ -544,109 +604,6 @@ async fn pick_directories_native() -> Result<Vec<String>, String> {
         .collect();
     
     Ok(paths)
-}
-
-#[cfg(target_os = "windows")]
-async fn pick_directories_native() -> Result<Vec<String>, String> {
-    use std::process::Command;
-    
-    let script = r#"
-        Add-Type -AssemblyName System.Windows.Forms
-        $folderBrowser = New-Object System.Windows.Forms.FolderBrowserDialog
-        $folderBrowser.Description = "Select folders (Ctrl+Click for multiple)"
-        $folderBrowser.ShowNewFolderButton = $false
-        
-        # Use a custom dialog that supports multiple selection
-        $shell = New-Object -ComObject Shell.Application
-        $folder = $shell.BrowseForFolder(0, "Select one or more folders (Ctrl+Click)", 0x200, 0)
-        
-        if ($folder -ne $null) {
-            $selectedItems = $folder.Items()
-            foreach ($item in $selectedItems) {
-                Write-Output $item.Path
-            }
-        }
-    "#;
-    
-    let output = Command::new("powershell")
-        .arg("-NoProfile")
-        .arg("-NonInteractive")
-        .arg("-Command")
-        .arg(script)
-        .output()
-        .map_err(|e| format!("Failed to run dialog: {}", e))?;
-    
-    if !output.status.success() {
-        return Err("User cancelled folder selection".to_string());
-    }
-    
-    let output_str = String::from_utf8_lossy(&output.stdout);
-    let paths: Vec<String> = output_str
-        .lines()
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
-        .collect();
-    
-    if paths.is_empty() {
-        return Err("No folders selected".to_string());
-    }
-    
-    Ok(paths)
-}
-
-#[cfg(target_os = "linux")]
-async fn pick_directories_native() -> Result<Vec<String>, String> {
-    use std::process::Command;
-    
-    // Try zenity first
-    let output = Command::new("zenity")
-        .arg("--file-selection")
-        .arg("--directory")
-        .arg("--multiple")
-        .arg("--separator=\n")
-        .arg("--title=Select one or more folders")
-        .output();
-    
-    if let Ok(output) = output {
-        if output.status.success() {
-            let output_str = String::from_utf8_lossy(&output.stdout);
-            let paths: Vec<String> = output_str
-                .lines()
-                .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty())
-                .collect();
-            
-            if !paths.is_empty() {
-                return Ok(paths);
-            }
-        }
-    }
-    
-    // Try kdialog as fallback
-    let output = Command::new("kdialog")
-        .arg("--getexistingdirectory")
-        .arg("--multiple")
-        .arg("--separate-output")
-        .arg("--title")
-        .arg("Select one or more folders")
-        .output();
-    
-    if let Ok(output) = output {
-        if output.status.success() {
-            let output_str = String::from_utf8_lossy(&output.stdout);
-            let paths: Vec<String> = output_str
-                .lines()
-                .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty())
-                .collect();
-            
-            if !paths.is_empty() {
-                return Ok(paths);
-            }
-        }
-    }
-    
-    Err("No suitable dialog found. Please install zenity or kdialog.".to_string())
 }
 
 #[tauri::command]
@@ -693,9 +650,9 @@ async fn get_llm_server_status(app: AppHandle, state: State<'_, ManagedLLMState>
     // Try multiple possible locations for the server executable
     let possible_paths = if cfg!(target_os = "windows") {
         vec![
-            server_dir.join("ollama_server").join("ollama_server.exe"),
-            server_dir.join("ollama_server.exe"),
-            server_dir.join("ollama_server").join("ollama_server").join("ollama_server.exe"),
+            server_dir.join("llama_server").join("llama_server.exe"),
+            server_dir.join("llama_server.exe"),
+            server_dir.join("llama_server").join("llama_server").join("llama_server.exe"),
         ]
     } else if cfg!(target_os = "macos") {
         vec![
@@ -705,9 +662,9 @@ async fn get_llm_server_status(app: AppHandle, state: State<'_, ManagedLLMState>
         ]
     } else {
         vec![
-            server_dir.join("ollama_server").join("ollama_server"),
-            server_dir.join("ollama_server"),
-            server_dir.join("ollama_server").join("ollama_server").join("ollama_server"),
+            server_dir.join("llama_server").join("llama_server"),
+            server_dir.join("llama_server"),
+            server_dir.join("llama_server").join("llama_server").join("llama_server"),
         ]
     };
     
@@ -794,6 +751,54 @@ async fn get_llm_server_status(app: AppHandle, state: State<'_, ManagedLLMState>
     }
 }
 
+// Helper function to check if Vulkan runtime is available on Windows
+#[cfg(target_os = "windows")]
+fn is_vulkan_available() -> bool {
+    use std::path::PathBuf;
+    
+    // Check for vulkan-1.dll in System32
+    let system32 = std::env::var("SystemRoot")
+        .map(|root| PathBuf::from(root).join("System32"))
+        .unwrap_or_else(|_| PathBuf::from("C:\\Windows\\System32"));
+    
+    let vulkan_dll = system32.join("vulkan-1.dll");
+    
+    if vulkan_dll.exists() {
+        eprintln!("Vulkan runtime detected at: {}", vulkan_dll.display());
+        return true;
+    }
+    
+    eprintln!("Vulkan runtime not found in System32");
+    false
+}
+
+#[cfg(target_os = "linux")]
+fn is_vulkan_available() -> bool {
+    use std::process::Command;
+
+    let output = match Command::new("vulkaninfo").output() {
+        Ok(output) => output,
+        Err(e) => {
+            eprintln!("Failed to run vulkaninfo: {}", e);
+            return false;
+        }
+    };
+    if output.status.success() {
+        eprintln!("Vulkan runtime detected");
+        return true;
+    }
+    eprintln!("Vulkan runtime not found");
+    return false;
+}
+
+// Stub function for macOS - Vulkan is not used on macOS, but this function
+// needs to exist for the type checker even though it will never be called
+#[cfg(target_os = "macos")]
+fn is_vulkan_available() -> bool {
+    false
+}
+
+
 #[command]
 async fn download_llm_server(app: AppHandle, version: String) -> Result<String, String> {
     let app_data_dir = app.path_resolver()
@@ -805,11 +810,24 @@ async fn download_llm_server(app: AppHandle, version: String) -> Result<String, 
 
     // Determine platform and download URL
     let (filename, extract_dir) = if cfg!(target_os = "windows") {
-        ("ollama_server-windows.zip", "ollama_server")
+        // Check if Vulkan is available for Windows
+        if is_vulkan_available() {
+            eprintln!("Using Vulkan-enabled server");
+            ("llama_server-windows-vulkan.zip", "llama_server")
+        } else {
+            eprintln!("Using CPU-only server (Vulkan not available)");
+            ("llama_server-windows-cpu.zip", "llama_server")
+        }
     } else if cfg!(target_os = "macos") {
         ("mlx_server-macos.tar.gz", "mlx_server")
     } else {
-        ("ollama_server-linux.tar.gz", "ollama_server")
+        if is_vulkan_available() {
+            eprintln!("Using Vulkan-enabled server");
+            ("llama_server-linux-vulkan.tar.gz", "llama_server")
+        } else {
+            eprintln!("Using CPU-only server (Vulkan not available)");
+            ("llama_server-linux-cpu.tar.gz", "llama_server")
+        }
     };
 
     let download_url = format!(
@@ -910,7 +928,7 @@ async fn download_llm_server(app: AppHandle, version: String) -> Result<String, 
         let server_exe = if cfg!(target_os = "macos") {
             extract_path.join("mlx_server")
         } else {
-            extract_path.join("ollama_server")
+            extract_path.join("llama_server")
         };
         
         use std::os::unix::fs::PermissionsExt;
@@ -942,11 +960,11 @@ async fn start_llm_server(
     
     let server_dir = app_data_dir.join("llm-server");
     let server_exe = if cfg!(target_os = "windows") {
-        server_dir.join("ollama_server").join("ollama_server").join("ollama_server.exe")
+        server_dir.join("llama_server").join("llama_server").join("llama_server.exe")
     } else if cfg!(target_os = "macos") {
         server_dir.join("mlx_server").join("mlx_server")
     } else {
-        server_dir.join("ollama_server").join("ollama_server")
+        server_dir.join("llama_server").join("llama_server")
     };
 
     if !server_exe.exists() {
@@ -964,10 +982,34 @@ async fn start_llm_server(
     if let Some(model) = &config.model {
         cmd.arg("--model").arg(model);
     }
+    if let Some(model_filename) = &config.model_filename {
+        cmd.arg("--filename").arg(model_filename);
+    }
     if let Some(model_path) = &config.model_path {
         cmd.arg("--model-path").arg(model_path);
     }
+    
+    // Add multi-modal arguments if specified
+    if let Some(mmproj_repo_id) = &config.mmproj_repo_id {
+        cmd.arg("--mmproj-repo-id").arg(mmproj_repo_id);
+    }
+    if let Some(mmproj_filename) = &config.mmproj_filename {
+        cmd.arg("--mmproj-filename").arg(mmproj_filename);
+    }
+    if let Some(chat_format) = &config.chat_format {
+        cmd.arg("--chat-format").arg(chat_format);
+    }
 
+    // Configure process creation for proper cleanup on Windows
+    #[cfg(target_os = "windows")]
+    {
+        use std::os::windows::process::CommandExt;
+        // CREATE_NEW_PROCESS_GROUP (0x00000200) - allows us to kill the process tree
+        // CREATE_NO_WINDOW (0x08000000) - prevents console window from appearing
+        const CREATE_NEW_PROCESS_GROUP: u32 = 0x00000200;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        cmd.creation_flags(CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW);
+    }
 
     // Start the server process
     eprintln!("Starting server with command: {:?}", server_exe);
@@ -1057,42 +1099,55 @@ async fn stop_llm_server(app: AppHandle, state: State<'_, ManagedLLMState>) -> R
         let pid = process_info.pid;
         eprintln!("Found server process with PID: {}", pid);
         
-        // Try to kill via Child handle first (if we have it)
-        let result = if let Some(mut child) = child_opt {
-            eprintln!("Killing via Child handle");
-            match child.kill() {
-                Ok(_) => {
-                    eprintln!("Kill signal sent to PID: {}", pid);
-                    let _ = child.wait(); // Wait for process to actually terminate
-                    eprintln!("Server process terminated");
-                    
-                    // On Windows, also kill the process tree using taskkill
-                    #[cfg(target_os = "windows")]
-                    {
-                        let _ = std::process::Command::new("taskkill")
-                            .args(&["/F", "/T", "/PID", &pid.to_string()])
-                            .output();
-                        eprintln!("Sent taskkill command to terminate process tree");
+        // On Windows, use taskkill to forcefully terminate the process tree first
+        #[cfg(target_os = "windows")]
+        {
+            eprintln!("Using taskkill to terminate process tree for PID: {}", pid);
+            let output = std::process::Command::new("taskkill")
+                .args(&["/F", "/T", "/PID", &pid.to_string()])
+                .output();
+            
+            match output {
+                Ok(output) => {
+                    if output.status.success() {
+                        eprintln!("Successfully killed process tree with taskkill");
+                    } else {
+                        eprintln!("Taskkill failed: {}", String::from_utf8_lossy(&output.stderr));
                     }
-                    
-                    Ok("Server stopped".to_string())
                 }
                 Err(e) => {
-                    eprintln!("Failed to kill server process via Child handle: {}", e);
-                    Err(format!("Failed to stop server: {}", e))
+                    eprintln!("Failed to execute taskkill: {}", e);
                 }
             }
+            
+            // Give the process a moment to terminate
+            std::thread::sleep(std::time::Duration::from_millis(500));
+        }
+        
+        // Also try to kill via Child handle (if we have it)
+        if let Some(mut child) = child_opt {
+            eprintln!("Also killing via Child handle");
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+        
+        // On Unix systems, kill by PID
+        #[cfg(unix)]
+        {
+            let _ = kill_process_by_pid(pid);
+        }
+        
+        // Verify the process is actually dead
+        if is_process_running(pid) {
+            eprintln!("Warning: Process {} may still be running after kill attempt", pid);
         } else {
-            // Orphaned process - kill by PID
-            eprintln!("No Child handle, killing orphaned process by PID");
-            kill_process_by_pid(pid)?;
-            Ok("Orphaned server stopped".to_string())
-        };
+            eprintln!("Confirmed: Process {} has terminated", pid);
+        }
         
         // Clean up PID file
         remove_pid_file(&app_data_dir);
         
-        result
+        Ok("Server stopped".to_string())
     } else {
         eprintln!("No server process found in state");
         Ok("Server was not running".to_string())
@@ -1212,20 +1267,24 @@ fn main() {
                     let pid = process_info.pid;
                     eprintln!("Stopping LLM server with PID: {}", pid);
                     
-                    // Kill via Child handle if available, otherwise by PID
+                    // On Windows, use taskkill first for forceful termination
+                    #[cfg(target_os = "windows")]
+                    {
+                        let _ = kill_process_by_pid(pid);
+                        // Brief wait to ensure termination
+                        std::thread::sleep(std::time::Duration::from_millis(300));
+                    }
+                    
+                    // Also kill via Child handle if available
                     if let Some(mut child) = child_opt {
                         let _ = child.kill();
                         let _ = child.wait();
-                    } else {
-                        let _ = kill_process_by_pid(pid);
                     }
                     
-                    // On Windows, also kill the process tree
-                    #[cfg(target_os = "windows")]
+                    // On Unix, kill by PID
+                    #[cfg(unix)]
                     {
-                        let _ = std::process::Command::new("taskkill")
-                            .args(&["/F", "/T", "/PID", &pid.to_string()])
-                            .output();
+                        let _ = kill_process_by_pid(pid);
                     }
                     
                     // Clean up PID file
@@ -1236,6 +1295,13 @@ fn main() {
                     eprintln!("LLM server stopped on app exit");
                 } else {
                     eprintln!("No LLM server was running on exit");
+                }
+                
+                // Final safety measure: kill any remaining llama_server.exe processes by name
+                #[cfg(target_os = "windows")]
+                {
+                    eprintln!("Final cleanup: killing any remaining llama_server.exe processes");
+                    let _ = kill_process_by_name("llama_server.exe");
                 }
             }
         })

@@ -86,9 +86,13 @@ export default function App() {
   const [llmConfig, setLlmConfig] = useState<LLMConfig>(loadLlmConfig());
   const [providerConfigs, setProviderConfigs] = useState<Record<string, LLMConfig>>(loadProviderConfigs());
   const defaultModel = (navigator.userAgent.includes('Mac') ? 'mlx-community/Phi-3.5-mini-instruct-4bit' : 'MaziyarPanahi/gemma-3-1b-it-GGUF');
+  const defaultModelFilename = (navigator.userAgent.includes('Mac') ? 'Phi-3.5-mini-instruct-4bit.mlx' : 'gemma-3-1b-it-GGUF.gguf');
   
   // Track if we've already attempted to start the server to prevent duplicates
   const serverStartAttempted = useRef(false);
+  
+  // Track if this is the initial mount to prevent clearing saved state on mount
+  const isInitialMount = useRef(true);
   
   // Managed LLM state
   const [managedLLMConfig, setManagedLLMConfig] = useState<ManagedLLMConfig>(() => {
@@ -101,9 +105,13 @@ export default function App() {
           port: config.port || 8000,
           host: config.host || '127.0.0.1',
           model: config.model || defaultModel,
-          log_level: config.log_level || config.logLevel || 'info', // Support both old and new field names
+          model_filename: config.model_filename || defaultModelFilename,
+          log_level: config.log_level || 'info', // Support both old and new field names
           model_path: config.model_path || config.modelPath,
-          env_vars: config.env_vars || config.envVars || {}
+          env_vars: config.env_vars || {},
+          mmproj_repo_id: config.mmproj_repo_id,
+          mmproj_filename: config.mmproj_filename,
+          chat_format: config.chat_format
         };
         return migratedConfig;
       }
@@ -114,6 +122,7 @@ export default function App() {
       port: 8000,
       host: '127.0.0.1',
       model: defaultModel,
+      model_filename: defaultModelFilename,
       log_level: 'info',
       env_vars: {}
     };
@@ -135,10 +144,6 @@ export default function App() {
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [showOptimizationResult, setShowOptimizationResult] = useState(false);
   const optimizationCancelRef = useRef(false);
-  
-  // Saved session state
-  const [savedSessionAvailable, setSavedSessionAvailable] = useState(false);
-  const [showSessionNotification, setShowSessionNotification] = useState(false);
   
   // Sorting state
   const [sortBy, setSortBy] = useState<SortField>('source');
@@ -261,6 +266,12 @@ export default function App() {
 
   // Auto-save processed state when scan completes or stops
   useEffect(() => {
+    // Skip on initial mount to allow saved state to be restored first
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+    
     if ((scanState === 'completed' || scanState === 'stopped') && rows.length > 0) {
       debugLogger.info('APP_STATE', 'Auto-saving state after scan completed/stopped', {
         scanState,
@@ -270,7 +281,7 @@ export default function App() {
     }
     // Clear saved state when scan is reset to idle with no rows
     if (scanState === 'idle' && rows.length === 0) {
-      debugLogger.info('APP_STATE', 'Clearing saved state (idle with no rows)', {});
+      debugLogger.info('APP_STATE', 'Clearing saved state (idle with no rows)', { scanState, rowCount: rows.length });
       clearProcessedState();
     }
   }, [scanState, rows]);
@@ -317,9 +328,13 @@ export default function App() {
             port: config.port || 8000,
             host: config.host || '127.0.0.1',
             model: config.model ||  defaultModel,
+            model_filename: config.model_filename || defaultModelFilename,
             log_level: config.log_level || config.logLevel || 'info',
             model_path: config.model_path || config.modelPath,
-            env_vars: config.env_vars || config.envVars || {}
+            env_vars: config.env_vars || config.envVars || {},
+            mmproj_repo_id: config.mmproj_repo_id,
+            mmproj_filename: config.mmproj_filename,
+            chat_format: config.chat_format
           };
           setManagedLLMConfig(migratedConfig);
           // Save the migrated config immediately
@@ -434,25 +449,25 @@ export default function App() {
     };
   }, []);
 
-  // Auto-restore saved session on mount
+  // Check for saved session on mount and auto-restore
   useEffect(() => {
     debugLogger.info('APP_INIT', 'Checking for saved session on mount', {});
     const savedState = loadProcessedState();
-    if (savedState && savedState.rows.length > 0) {
-      debugLogger.info('APP_INIT', 'Restoring saved session', {
-        rowCount: savedState.rows.length,
-        directories: savedState.directories,
-      });
-      restoreProcessedState(savedState);
-      setSavedSessionAvailable(false);
-      setShowSessionNotification(false);
+    if (savedState) {
+      if (savedState.rows.length > 0) {
+        debugLogger.info('APP_INIT', 'Auto-restoring saved session', { 
+          rowCount: savedState.rows.length,
+          directories: savedState.directories || []
+        });
+        restoreProcessedState(savedState);
+      } else {
+        debugLogger.info('APP_INIT', 'Saved session found but has no rows', {});
+      }
     } else {
-      debugLogger.info('APP_INIT', 'No saved session found or session was empty', {
-        hasSavedState: !!savedState,
-        rowCount: savedState?.rows.length || 0,
-      });
+      debugLogger.info('APP_INIT', 'No saved session found', {});
     }
-  }, []); // runs only once on mount
+  }, []);
+
 
   const pickDirectory = async () => {
     try {
@@ -716,8 +731,10 @@ export default function App() {
 
   const categoriesHint = useMemo(() => {
     const set = new Set<string>();
-    rows.forEach((r: Row) => { if (r.category) set.add(r.category); });
-    return Array.from(set);
+    rows.forEach((r: Row) => { if (r.category && r.category.toLowerCase().indexOf('uncategorized') != -1) set.add(r.category); else set.add('Uncategorized'); });
+    const hints: string[] = Array.from(set);
+    debugLogger.info('CATEGORIES_HINT', 'Categories hint', { hints });
+    return hints.length > 0 ? hints.slice(0, Math.min(hints.length, 10)) : [];
   }, [rows]);
 
   // Helper function to find which directory a file belongs to
@@ -785,8 +802,6 @@ export default function App() {
 
     // Clear saved state when starting a new scan
     clearProcessedState();
-    setSavedSessionAvailable(false);
-    setShowSessionNotification(false);
 
     setBusy(true);
     setScanState('scanning');
@@ -997,8 +1012,6 @@ export default function App() {
     setOptimizedCategories({ categories: new Set(), count: 0, total: 0 });
     setShowOptimizationResult(false);
     clearProcessedState(); // Clear saved state when resetting
-    setSavedSessionAvailable(false);
-    setShowSessionNotification(false);
     scanControlRef.current = {
       shouldStop: false,
       currentFileIndex: 0,
@@ -1123,14 +1136,71 @@ export default function App() {
     return (savedTheme === 'dark' || savedTheme === 'light') ? savedTheme : 'light';
   });
 
+  const [fontSizeMultiplier, setFontSizeMultiplier] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('fontSizeMultiplier');
+      if (saved) {
+        const parsed = parseFloat(saved);
+        // Clamp between 0.5 and 2.0 for reasonable bounds
+        return isNaN(parsed) ? 1.0 : Math.max(0.5, Math.min(2.0, parsed));
+      }
+    } catch (error) {
+      debugLogger.error('APP_INIT', 'Failed to load font size multiplier from localStorage', { error });
+    }
+    return 1.0;
+  });
+
   useEffect(() => {
     document.body.classList.toggle('dark-theme', theme === 'dark');
     localStorage.setItem('appTheme', theme);
   }, [theme]);
 
+  useEffect(() => {
+    // Apply font size multiplier as CSS variable
+    document.documentElement.style.setProperty('--font-size-multiplier', fontSizeMultiplier.toString());
+    localStorage.setItem('fontSizeMultiplier', fontSizeMultiplier.toString());
+  }, [fontSizeMultiplier]);
+
   const toggleTheme = () => {
     setTheme(prev => prev === 'light' ? 'dark' : 'light');
   };
+
+  const increaseFontSize = () => {
+    setFontSizeMultiplier(prev => Math.min(2.0, prev + 0.1));
+  };
+
+  const decreaseFontSize = () => {
+    setFontSizeMultiplier(prev => Math.max(0.5, prev - 0.1));
+  };
+
+  // Keyboard shortcuts for font size
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Don't trigger if user is typing in an input field
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+        return;
+      }
+
+      // Check for Ctrl+Plus/Minus (Windows/Linux) or Cmd+Plus/Minus (Mac)
+      const isMac = navigator.userAgent.includes('Mac');
+      const modifierKey = isMac ? e.metaKey : e.ctrlKey;
+      
+      if (modifierKey && (e.key === '+' || e.key === '=' || e.key === '-')) {
+        e.preventDefault();
+        if (e.key === '+' || e.key === '=') {
+          setFontSizeMultiplier(prev => Math.min(2.0, prev + 0.1));
+        } else if (e.key === '-') {
+          setFontSizeMultiplier(prev => Math.max(0.5, prev - 0.1));
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
 
   return (
     <div className="app-layout">

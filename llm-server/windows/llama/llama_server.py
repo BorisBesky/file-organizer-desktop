@@ -7,8 +7,40 @@ from llama_cpp import Llama
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Union
 import uvicorn
+
+# Import chat handlers with error handling for missing handlers
+CHAT_HANDLERS = {}
+try:
+    from llama_cpp.llama_chat_format import (
+        Llava15ChatHandler,
+        Llava16ChatHandler,
+        MoondreamChatHandler,
+        #NanollavaChatHandler,
+        Llama3VisionAlphaChatHandler,
+        MiniCPMv26ChatHandler,
+        Qwen25VLChatHandler,
+    )
+    CHAT_HANDLERS = {
+        'llava-1-5': Llava15ChatHandler,
+        'llava-1-6': Llava16ChatHandler,
+        'moondream2': MoondreamChatHandler,
+        #'nanollava': NanollavaChatHandler,
+        'llama-3-vision-alpha': Llama3VisionAlphaChatHandler,
+        'minicpm-v-2.6': MiniCPMv26ChatHandler,
+        'qwen2.5-vl': Qwen25VLChatHandler,
+    }
+except ImportError:
+    # Chat handlers not available - multi-modal support will be disabled
+    pass
+
+# Fix for PyInstaller with console=False: ensure stdout/stderr are not None
+# This prevents uvicorn logging from failing when checking isatty()
+if sys.stdout is None:
+    sys.stdout = open(os.devnull, 'w')
+if sys.stderr is None:
+    sys.stderr = open(os.devnull, 'w')
 
 try:
     from version import __version__, __build_date__
@@ -25,6 +57,7 @@ default_filename = "gemma-3-1b-it.Q8_0.gguf"
 default_port = 8000
 default_log_level = "info"
 default_host = "127.0.0.1"
+default_n_gpu_layers = -1
 
 # Parse command-line arguments
 def parse_args():
@@ -39,19 +72,26 @@ Environment variables (overridden by command-line arguments):
   SERVER_PORT         Port to listen on (default: %(default_port)s)
   SERVER_LOG_LEVEL    Log level (default: %(default_log_level)s)
   SERVER_HOST         Host to listen on (default: %(default_host)s)
+  SERVER_N_GPU_LAYERS Number of GPU layers to use (default: %(default_n_gpu_layers)s)
+  SERVER_MMPROJ_REPO_ID   Hugging Face repo ID for multi-modal projection model
+  SERVER_MMPROJ_FILENAME  Filename for multi-modal projection model
+  SERVER_CHAT_FORMAT  Chat format for multi-modal models (required if using multi-modal)
+                      Supported: llava-1-5, llava-1-6, moondream2, nanollava,
+                      llama-3-vision-alpha, minicpm-v-2.6, qwen2.5-vl
         """ % {
             'default_model': default_model_id,
             'default_filename': default_filename,
             'default_port': default_port,
             'default_log_level': default_log_level,
-            'default_host': default_host
+            'default_host': default_host,
+            'default_n_gpu_layers': default_n_gpu_layers
         }
     )
     
     parser.add_argument(
         '--version', '-v',
         action='version',
-        version=f'ollama_server version {__version__} (build date: {__build_date__})'
+        version=f'llama_server version {__version__} (build date: {__build_date__})'
     )
     
     parser.add_argument(
@@ -91,6 +131,37 @@ Environment variables (overridden by command-line arguments):
         help=f'Logging level (default: {default_log_level})'
     )
     
+    parser.add_argument(
+        '--n-gpu-layers',
+        type=int,
+        help=f'Number of GPU layers to use (default: {default_n_gpu_layers})'
+    )
+    
+    parser.add_argument(
+        '--mmproj-repo-id',
+        type=str,
+        help='Hugging Face repo ID for multi-modal projection model (enables multi-modal support)'
+    )
+    
+    parser.add_argument(
+        '--mmproj-filename',
+        type=str,
+        help='Filename for multi-modal projection model (e.g., mmproj-F16.gguf)'
+    )
+    
+    chat_format_help = 'Chat format for multi-modal models'
+    if CHAT_HANDLERS:
+        chat_format_help += '. Supported: ' + ', '.join(CHAT_HANDLERS.keys())
+    else:
+        chat_format_help += ' (multi-modal handlers not available)'
+    
+    parser.add_argument(
+        '--chat-format',
+        type=str,
+        choices=list(CHAT_HANDLERS.keys()) if CHAT_HANDLERS else None,
+        help=chat_format_help
+    )
+    
     return parser.parse_args()
 
 # Initialize with command-line args, environment variables, or defaults
@@ -111,19 +182,56 @@ else:
 port_number = args.port if args.port is not None else int(os.environ.get('SERVER_PORT', default_port))
 log_level = args.log_level or os.environ.get('SERVER_LOG_LEVEL', default_log_level)
 hostname = args.host or os.environ.get('SERVER_HOST', default_host)
+n_gpu_layers = args.n_gpu_layers or int(os.environ.get('SERVER_N_GPU_LAYERS', default_n_gpu_layers))
+
+# Multi-modal support: initialize chat handler if mmproj parameters are provided
+mmproj_repo_id = args.mmproj_repo_id or os.environ.get('SERVER_MMPROJ_REPO_ID')
+mmproj_filename = args.mmproj_filename or os.environ.get('SERVER_MMPROJ_FILENAME')
+chat_format = args.chat_format or os.environ.get('SERVER_CHAT_FORMAT')
+chat_handler = None
+
+if mmproj_repo_id and mmproj_filename:
+    if not CHAT_HANDLERS:
+        print("Error: Multi-modal chat handlers are not available.")
+        print("Please ensure llama-cpp-python is installed with multi-modal support.")
+        sys.exit(1)
+    
+    if not chat_format:
+        print("Error: --chat-format is required when using multi-modal models")
+        print(f"Supported formats: {', '.join(CHAT_HANDLERS.keys())}")
+        sys.exit(1)
+    
+    if chat_format not in CHAT_HANDLERS:
+        print(f"Error: Unsupported chat format '{chat_format}'")
+        print(f"Supported formats: {', '.join(CHAT_HANDLERS.keys())}")
+        sys.exit(1)
+    
+    handler_class = CHAT_HANDLERS[chat_format]
+    print(f"Initializing multi-modal chat handler ({chat_format}) from {mmproj_repo_id}/{mmproj_filename}")
+    chat_handler = handler_class.from_pretrained(
+        repo_id=mmproj_repo_id,
+        filename=mmproj_filename,
+    )
+    print(f"Multi-modal support enabled with {chat_format} format")
 
 # Initialize the Llama model once
-llama = Llama(
-    model_path=model_path,
-    n_ctx=2048,
-    n_batch=512,
-    verbose=True,
-)
+llama_kwargs = {
+    'model_path': model_path,
+    'n_ctx': 2048,
+    'n_batch': 512,
+    'n_gpu_layers': n_gpu_layers,
+    'verbose': True,
+}
+
+if chat_handler:
+    llama_kwargs['chat_handler'] = chat_handler
+
+llama = Llama(**llama_kwargs)
 
 # Request/Response models
 class Message(BaseModel):
     role: str
-    content: str
+    content: Union[str, List[Dict[str, Any]]]  # Support both text and multi-modal content
 
 class ChatCompletionRequest(BaseModel):
     model: Optional[str] = None
@@ -185,7 +293,7 @@ async def list_models():
 
 if __name__ == "__main__":
     # Log version on startup
-    print(f"Starting ollama_server v{__version__} (build date: {__build_date__})")
+    print(f"Starting llama_server v{__version__} (build date: {__build_date__})")
     print(f"Server configuration:")
     print(f"  Model: {model_path}")
     print(f"  Host: {hostname}")

@@ -5,4 +5,6 @@ src-tauri/target/.*
 src-tauri/target/.rustc_info.json
 .DS_Store
 .vscode
+.vs
+__pycache__
 .env channel

@@ -1,4 +1,7 @@
 :root {
+  /* Font size multiplier - can be adjusted via keyboard shortcuts */
+  --font-size-multiplier: 1;
+  
   /* Light theme colors */
   --bg-primary: #ffffff;
   --bg-secondary: #f5f5f7;
@@ -98,6 +101,8 @@ body {
   font-size: 13px;
   line-height: 1.5;
   transition: background-color 0.3s ease, color 0.3s ease;
+  /* Use zoom to scale entire UI proportionally - works in Chromium-based browsers (Tauri) */
+  zoom: var(--font-size-multiplier, 1);
 }
 
 /* App Layout - Two column with header */
