@@ -572,40 +572,6 @@ async fn pick_directory(_app: AppHandle) -> Result<Vec<String>, String> {
     }
 }
 
-#[cfg(target_os = "macos")]
-async fn pick_directories_native() -> Result<Vec<String>, String> {
-    use std::process::Command;
-    
-    let script = r#"
-        set selectedFolders to choose folder with prompt "Select one or more folders" with multiple selections allowed
-        set folderPaths to {}
-        repeat with aFolder in selectedFolders
-            set end of folderPaths to POSIX path of aFolder
-        end repeat
-        return folderPaths
-    "#;
-    
-    let output = Command::new("osascript")
-        .arg("-e")
-        .arg(script)
-        .output()
-        .map_err(|e| format!("Failed to run dialog: {}", e))?;
-    
-    if !output.status.success() {
-        return Err("User cancelled folder selection".to_string());
-    }
-    
-    let output_str = String::from_utf8_lossy(&output.stdout);
-    let paths: Vec<String> = output_str
-        .trim()
-        .split(", ")
-        .filter(|s| !s.is_empty())
-        .map(|s| s.trim().to_string())
-        .collect();
-    
-    Ok(paths)
-}
-
 #[tauri::command]
 async fn open_file(path: String) -> Result<(), String> {
     use std::process::Command;
