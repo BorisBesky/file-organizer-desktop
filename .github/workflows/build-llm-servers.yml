@@ -312,7 +312,8 @@ jobs:
       - name: Sign binary
         run: |
           echo "Signing with identity: $APPLE_SIGNING_IDENTITY"
-          codesign --force --options runtime --deep --sign "$APPLE_SIGNING_IDENTITY" llm-server/macos/mlx/dist/mlx_server/mlx_server
+          ENTITLEMENTS="llm-server/macos/mlx/entitlements.plist"
+          codesign --force --options runtime --deep --sign "$APPLE_SIGNING_IDENTITY" --entitlements "$ENTITLEMENTS" llm-server/macos/mlx/dist/mlx_server/mlx_server
 
       - name: Package artifact
         working-directory: llm-server/macos/mlx/dist
