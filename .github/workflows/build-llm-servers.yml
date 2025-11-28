@@ -276,12 +276,12 @@ jobs:
         env:
           APPLE_CERT_BASE64: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          KEYCHAIN_PASSWORD: tauri-build
+          KEYCHAIN_PASSWORD: pyinstaller-build
         run: |
           set -euo pipefail
           
-          KEYCHAIN_PATH="$HOME/Library/Keychains/tauri-build.keychain-db"
-          CERT_P12_TMP="$(mktemp -t tauri-cert-XXXX).p12"
+          KEYCHAIN_PATH="$HOME/Library/Keychains/pyinstaller-build.keychain-db"
+          CERT_P12_TMP="$(mktemp -t pyinstaller-cert-XXXX).p12"
 
           # Decode cert to a temp file
           echo "$APPLE_CERT_BASE64" | base64 --decode > "$CERT_P12_TMP"
