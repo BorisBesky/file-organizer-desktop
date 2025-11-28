@@ -271,10 +271,49 @@ jobs:
           __build_date__ = "$BUILD_DATE"
           EOF
       
+      - name: Prepare macOS signing keychain
+        shell: bash
+        env:
+          APPLE_CERT_BASE64: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERT_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: tauri-build
+        run: |
+          set -euo pipefail
+          
+          KEYCHAIN_PATH="$HOME/Library/Keychains/tauri-build.keychain-db"
+          CERT_P12_TMP="$(mktemp -t tauri-cert-XXXX).p12"
+
+          # Decode cert to a temp file
+          echo "$APPLE_CERT_BASE64" | base64 --decode > "$CERT_P12_TMP"
+
+          # Create and unlock keychain at full predictable path
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -t 3600 -u "$KEYCHAIN_PATH"
+
+          # Import the p12 and allow codesign/pkgbuild/productbuild to access it
+          security import "$CERT_P12_TMP" -k "$KEYCHAIN_PATH" -P "$APPLE_CERT_PASSWORD" \
+            -T /usr/bin/codesign -T /usr/bin/pkgbuild -T /usr/bin/productbuild
+
+          # Ensure keychain is in the user's keychain list (use login + our keychain)
+          security list-keychains -d user -s "$HOME/Library/Keychains/login.keychain-db" "$KEYCHAIN_PATH"
+
+          # Ensure codesign can access the private key (partition list)
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          # Extract the first identity CN and export it for subsequent steps
+          APPLE_SIGNING_IDENTITY=$(security find-identity -v -p codesigning | awk -F\" 'NR==1{print $2}')
+          echo "APPLE_SIGNING_IDENTITY=$APPLE_SIGNING_IDENTITY" >> "$GITHUB_ENV"
+
       - name: Build with PyInstaller
         working-directory: llm-server/macos/mlx
         run: pyinstaller mlx_server.spec
       
+      - name: Sign binary
+        run: |
+          echo "Signing with identity: $APPLE_SIGNING_IDENTITY"
+          codesign --force --options runtime --deep --sign "$APPLE_SIGNING_IDENTITY" llm-server/macos/mlx/dist/mlx_server/mlx_server
+
       - name: Package artifact
         working-directory: llm-server/macos/mlx/dist
         run: |
