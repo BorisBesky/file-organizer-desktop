@@ -11,7 +11,7 @@ except ImportError:
 
 
 # Default configuration
-default_model = "mlx-community/Phi-3.5-mini-instruct-4bit"
+default_model = "mlx-community/gemma-3n-E4B-it-lm-4bit"
 default_host = "127.0.0.1"
 default_port = 8000
 default_log_level = "info"
@@ -66,7 +66,8 @@ Environment variables (overridden by command-line arguments):
         help=f'Logging level (default: {default_log_level})'
     )
     
-    return parser.parse_args()
+    args, _ = parser.parse_known_args()
+    return args
 
 
 def build_argv_from_config(model, host, port, log_level):

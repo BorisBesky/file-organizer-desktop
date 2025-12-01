@@ -85,8 +85,10 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled, pro
   }, [config.customHeaders]);
 
   const currentProviderInfo = PROVIDER_INFO[config.provider];
-  const defaultModel = (navigator.userAgent.includes('Mac') ? 'mlx-community/Phi-3.5-mini-instruct-4bit' : 'MaziyarPanahi/gemma-3-1b-it-GGUF');
-  const defaultModelFilename = (navigator.userAgent.includes('Mac') ? 'Phi-3.5-mini-instruct-4bit.gguf' : 'gemma-3-1b-it-GGUF.gguf');
+  const isMac = navigator.userAgent.includes('Mac');
+  debugLogger.debug('LLM_CONFIG_PANEL', 'isMac', { isMac });
+  const defaultModel = (isMac ? 'mlx-community/gemma-3n-E4B-it-lm-4bit' : 'MaziyarPanahi/gemma-3-1b-it-GGUF');
+  const defaultModelFilename = (isMac ? '' : 'gemma-3-1b-it-GGUF.gguf');
 
   // Initialize managed LLM config if not provided
   const defaultManagedConfig: ManagedLLMConfig = {
@@ -531,41 +533,6 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled, pro
                       Hugging Face model ID to download automatically
                     </div>
                   </div>
-
-                  <div className="config-section">
-                    <label className="config-label">
-                      Model Filename
-                      <input
-                        type="text"
-                        className="config-input"
-                        value={currentManagedConfig.model_filename || ''}
-                        onChange={(e) => updateManagedConfig({ model_filename: e.target.value || undefined })}
-                        placeholder={`e.g., ${defaultModelFilename}`}
-                        disabled={disabled}
-                      />
-                    </label>
-                    <div className="config-hint">
-                      Hugging Face model filename to download automatically
-                    </div>
-                  </div>                  
-
-                  <div className="config-section">
-                    <label className="config-label">
-                      Model Path (Optional)
-                      <input
-                        type="text"
-                        className="config-input"
-                        value={currentManagedConfig.model_path || ''}
-                        onChange={(e) => updateManagedConfig({ model_path: e.target.value || undefined })}
-                        placeholder="Path to local model file"
-                        disabled={disabled}
-                      />
-                    </label>
-                    <div className="config-hint">
-                      Override model download with local file path
-                    </div>
-                  </div>
-
                   <div className="config-section">
                     <label className="config-label">
                       Log Level
@@ -582,8 +549,45 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled, pro
                       </select>
                     </label>
                   </div>
+                  {!isMac && (
+                  <div className="config-section">
+                    <label className="config-label">
+                      Model Filename
+                      <input
+                        type="text"
+                        className="config-input"
+                        value={currentManagedConfig.model_filename || ''}
+                        onChange={(e) => updateManagedConfig({ model_filename: e.target.value || undefined })}
+                        placeholder={`e.g., ${defaultModelFilename}`}
+                        disabled={disabled || isMac}
+                      />
+                    </label>
+                    <div className="config-hint">
+                      Hugging Face model filename to download automatically
+                    </div>
+                  </div> 
+                  )}
+                  {!isMac && (
+                  <div className="config-section">
+                    <label className="config-label">
+                      Model Path (Optional)
+                      <input
+                        type="text"
+                        className="config-input"
+                        value={currentManagedConfig.model_path || ''}
+                        onChange={(e) => updateManagedConfig({ model_path: e.target.value || undefined })}
+                        placeholder="Path to local model file"
+                        disabled={disabled}
+                      />
+                    </label>
+                    <div className="config-hint">
+                      Override model download with local file path
+                    </div>
+                  </div>
+                  )}
 
                   {/* Multi-modal Configuration */}
+                  {config.supportsVision && !isMac && (<>
                   <div className="config-section">
                     <h4 style={{ marginTop: '1rem', marginBottom: '0.5rem' }}>Multi-Modal Support (Optional)</h4>
                     <div className="config-hint" style={{ marginBottom: '1rem' }}>
@@ -613,6 +617,7 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled, pro
                       Select the chat format for your multi-modal model
                     </div>
                   </div>
+                  </>)}
 
                   {currentManagedConfig.chat_format && (
                     <>
