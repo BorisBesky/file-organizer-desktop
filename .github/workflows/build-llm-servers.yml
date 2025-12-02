@@ -307,13 +307,17 @@ jobs:
 
       - name: Build with PyInstaller
         working-directory: llm-server/macos/mlx
-        run: pyinstaller mlx_server.spec
-      
-      - name: Sign binary
+        run: pyinstaller --codesign-identity "$APPLE_SIGNING_IDENTITY" --osx-entitlements-file entitlements.plist mlx_server.spec
+
+      - name: Notarize the app
+        working-directory: llm-server/macos/mlx/dist
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_ID_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          echo "Signing with identity: $APPLE_SIGNING_IDENTITY"
-          ENTITLEMENTS="llm-server/macos/mlx/entitlements.plist"
-          codesign --force --options runtime --deep --sign "$APPLE_SIGNING_IDENTITY" --entitlements "$ENTITLEMENTS" llm-server/macos/mlx/dist/mlx_server/mlx_server
+          zip -r mlx_server.zip mlx_server
+          xcrun notarytool submit mlx_server.zip --apple-id "$APPLE_ID" --password "$APPLE_ID_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
 
       - name: Package artifact
         working-directory: llm-server/macos/mlx/dist
