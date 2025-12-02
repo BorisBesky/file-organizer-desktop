@@ -308,6 +308,18 @@ jobs:
       - name: Build with PyInstaller
         working-directory: llm-server/macos/mlx
         run: pyinstaller mlx_server.spec
+      
+      - name: Sign binary
+        run: |
+          echo "Signing with identity: $APPLE_SIGNING_IDENTITY"
+          ENTITLEMENTS="llm-server/macos/mlx/entitlements.plist"
+          DIST_DIR="llm-server/macos/mlx/dist/mlx_server"
+          
+          # Sign all bundles, dylibs, and so files inside the dist directory
+          find "$DIST_DIR" -type f \( -name "*.dylib" -o -name "*.so" -o -name "Python" \) -exec codesign --force --options runtime --sign "$APPLE_SIGNING_IDENTITY" {} \;
+          
+          # Sign the main executable
+          codesign --force --options runtime --deep --sign "$APPLE_SIGNING_IDENTITY" --entitlements "$ENTITLEMENTS" "$DIST_DIR/mlx_server"
 
       - name: Notarize the app
         working-directory: llm-server/macos/mlx/dist

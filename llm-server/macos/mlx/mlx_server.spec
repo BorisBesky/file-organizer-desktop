@@ -205,13 +205,6 @@ print(f"Added transformers Tree from {transformers_path}")
 
 pyz = PYZ(a.pure)
 
-# Get codesign identity from environment variable
-codesign_identity = os.environ.get('APPLE_SIGNING_IDENTITY')
-if codesign_identity:
-    print(f"Signing with identity: {codesign_identity}")
-else:
-    print("No signing identity found in environment variable APPLE_SIGNING_IDENTITY")
-
 # Use onedir mode instead of onefile for better multiprocessing support
 exe = EXE(
     pyz,
@@ -227,8 +220,8 @@ exe = EXE(
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
-    codesign_identity=codesign_identity,
-    entitlements_file='entitlements.plist',
+    codesign_identity=None,
+    entitlements_file=None,
 )
 
 # COLLECT creates a directory with all files (onedir mode)
