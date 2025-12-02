@@ -311,39 +311,72 @@ jobs:
       
       - name: Sign binary
         run: |
+          set -euo pipefail
           echo "Signing with identity: $APPLE_SIGNING_IDENTITY"
           ENTITLEMENTS="llm-server/macos/mlx/entitlements.plist"
           DIST_DIR="llm-server/macos/mlx/dist/mlx_server"
           INTERNAL_DIR="$DIST_DIR/_internal"
           
-          # Sign all .so files
-          find "$DIST_DIR" -type f -name "*.so" -exec codesign --force --options runtime --sign "$APPLE_SIGNING_IDENTITY" {} \;
+          # Check if Python is a symlink or hardlink to the framework
+          echo "Checking Python binary structure..."
+          ls -la "$INTERNAL_DIR/Python" || true
+          ls -la "$INTERNAL_DIR/Python.framework/Python" || true
           
-          # Sign all .dylib files
-          find "$DIST_DIR" -type f -name "*.dylib" -exec codesign --force --options runtime --sign "$APPLE_SIGNING_IDENTITY" {} \;
-          
-          # Sign the Python binary in _internal (standalone)
-          if [ -f "$INTERNAL_DIR/Python" ]; then
-            echo "Signing $INTERNAL_DIR/Python"
-            codesign --force --options runtime --sign "$APPLE_SIGNING_IDENTITY" "$INTERNAL_DIR/Python"
+          # If Python is a symlink, remove it and we'll recreate after signing framework
+          if [ -L "$INTERNAL_DIR/Python" ]; then
+            echo "Python is a symlink, will handle via framework signing"
+            PYTHON_LINK_TARGET=$(readlink "$INTERNAL_DIR/Python")
+            rm "$INTERNAL_DIR/Python"
+            PYTHON_IS_SYMLINK=true
+          else
+            PYTHON_IS_SYMLINK=false
           fi
           
-          # Sign Python.framework if it exists
+          # Sign all .so files with timestamp
+          echo "Signing .so files..."
+          find "$DIST_DIR" -type f -name "*.so" -exec codesign --force --timestamp --options runtime --sign "$APPLE_SIGNING_IDENTITY" {} \;
+          
+          # Sign all .dylib files with timestamp
+          echo "Signing .dylib files..."
+          find "$DIST_DIR" -type f -name "*.dylib" -exec codesign --force --timestamp --options runtime --sign "$APPLE_SIGNING_IDENTITY" {} \;
+          
+          # Sign Python.framework properly (from inside out)
           if [ -d "$INTERNAL_DIR/Python.framework" ]; then
-            echo "Signing Python.framework"
-            # Sign the Python binary inside the framework
-            codesign --force --options runtime --sign "$APPLE_SIGNING_IDENTITY" "$INTERNAL_DIR/Python.framework/Versions/Current/Python" 2>/dev/null || true
-            codesign --force --options runtime --sign "$APPLE_SIGNING_IDENTITY" "$INTERNAL_DIR/Python.framework/Python" 2>/dev/null || true
-            # Sign the framework itself
-            codesign --force --options runtime --sign "$APPLE_SIGNING_IDENTITY" "$INTERNAL_DIR/Python.framework"
+            echo "Signing Python.framework..."
+            
+            # Find and sign the actual Python binary (not symlinks)
+            FRAMEWORK_PYTHON=$(find "$INTERNAL_DIR/Python.framework" -type f -name "Python" | head -1)
+            if [ -n "$FRAMEWORK_PYTHON" ]; then
+              echo "Signing framework Python binary: $FRAMEWORK_PYTHON"
+              codesign --force --timestamp --options runtime --sign "$APPLE_SIGNING_IDENTITY" "$FRAMEWORK_PYTHON"
+            fi
+            
+            # Sign the framework bundle itself
+            codesign --force --timestamp --options runtime --sign "$APPLE_SIGNING_IDENTITY" "$INTERNAL_DIR/Python.framework"
+          fi
+          
+          # Handle standalone Python binary (if not a symlink)
+          if [ "$PYTHON_IS_SYMLINK" = "true" ]; then
+            echo "Recreating Python symlink..."
+            ln -s "$PYTHON_LINK_TARGET" "$INTERNAL_DIR/Python"
+          elif [ -f "$INTERNAL_DIR/Python" ]; then
+            echo "Signing standalone Python binary..."
+            codesign --force --timestamp --options runtime --sign "$APPLE_SIGNING_IDENTITY" "$INTERNAL_DIR/Python"
           fi
           
           # Sign the main executable
-          codesign --force --options runtime --deep --sign "$APPLE_SIGNING_IDENTITY" --entitlements "$ENTITLEMENTS" "$DIST_DIR/mlx_server"
+          echo "Signing main executable..."
+          codesign --force --timestamp --options runtime --sign "$APPLE_SIGNING_IDENTITY" --entitlements "$ENTITLEMENTS" "$DIST_DIR/mlx_server"
           
-          # Verify signatures
+          # Verify all signatures
           echo "Verifying signatures..."
-          codesign --verify --verbose "$DIST_DIR/mlx_server"
+          codesign --verify --verbose=2 "$DIST_DIR/mlx_server"
+          if [ -f "$INTERNAL_DIR/Python" ] && [ ! -L "$INTERNAL_DIR/Python" ]; then
+            codesign --verify --verbose=2 "$INTERNAL_DIR/Python"
+          fi
+          if [ -d "$INTERNAL_DIR/Python.framework" ]; then
+            codesign --verify --verbose=2 "$INTERNAL_DIR/Python.framework"
+          fi
 
       - name: Notarize the app
         working-directory: llm-server/macos/mlx/dist
