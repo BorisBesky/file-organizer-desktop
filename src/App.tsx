@@ -1007,6 +1007,8 @@ export default function App() {
     setScanState('idle');
     setRows([]);
     setEvents([]);
+    setDirectories([]);
+    setIncludeSubdirectories(false);
     setProgress({ current: 0, total: 0 });
     setBusy(false);
     setOptimizedCategories({ categories: new Set(), count: 0, total: 0 });
