@@ -37,7 +37,7 @@ This will:
 After the workflow completes, you can download:
 - `llama_server-windows.zip` - Windows Llama server
 - `llama_server-linux.tar.gz` - Linux Llama server  
-- `mlx_server-macos.tar.gz` - macOS MLX server
+- `mlx_server-macos.zip` - macOS MLX server
 
 ## Local Build
 

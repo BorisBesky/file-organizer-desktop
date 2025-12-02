@@ -439,7 +439,7 @@ jobs:
             artifacts/llama-server-windows-vulkan/llama_server-windows-vulkan.zip
             artifacts/llama-server-linux/llama_server-linux-cpu.tar.gz
             artifacts/llama-server-linux-vulkan/llama_server-linux-vulkan.tar.gz
-            artifacts/mlx-server-macos/mlx_server-macos.tar.gz
+            artifacts/mlx-server-macos/mlx_server-macos.zip
           draft: ${{ steps.release_meta.outputs.draft }}
           prerelease: false
           generate_release_notes: true

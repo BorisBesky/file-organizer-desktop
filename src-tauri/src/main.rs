@@ -785,7 +785,7 @@ async fn download_llm_server(app: AppHandle, version: String) -> Result<String, 
             ("llama_server-windows-cpu.zip", "llama_server")
         }
     } else if cfg!(target_os = "macos") {
-        ("mlx_server-macos.tar.gz", "mlx_server")
+        ("mlx_server-macos.zip", "mlx_server")
     } else {
         if is_vulkan_available() {
             eprintln!("Using Vulkan-enabled server");
