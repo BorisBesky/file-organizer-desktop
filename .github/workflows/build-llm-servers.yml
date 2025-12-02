@@ -314,12 +314,36 @@ jobs:
           echo "Signing with identity: $APPLE_SIGNING_IDENTITY"
           ENTITLEMENTS="llm-server/macos/mlx/entitlements.plist"
           DIST_DIR="llm-server/macos/mlx/dist/mlx_server"
+          INTERNAL_DIR="$DIST_DIR/_internal"
           
-          # Sign all bundles, dylibs, and so files inside the dist directory
-          find "$DIST_DIR" -type f \( -name "*.dylib" -o -name "*.so" -o -name "Python" \) -exec codesign --force --options runtime --sign "$APPLE_SIGNING_IDENTITY" {} \;
+          # Sign all .so files
+          find "$DIST_DIR" -type f -name "*.so" -exec codesign --force --options runtime --sign "$APPLE_SIGNING_IDENTITY" {} \;
+          
+          # Sign all .dylib files
+          find "$DIST_DIR" -type f -name "*.dylib" -exec codesign --force --options runtime --sign "$APPLE_SIGNING_IDENTITY" {} \;
+          
+          # Sign the Python binary in _internal (standalone)
+          if [ -f "$INTERNAL_DIR/Python" ]; then
+            echo "Signing $INTERNAL_DIR/Python"
+            codesign --force --options runtime --sign "$APPLE_SIGNING_IDENTITY" "$INTERNAL_DIR/Python"
+          fi
+          
+          # Sign Python.framework if it exists
+          if [ -d "$INTERNAL_DIR/Python.framework" ]; then
+            echo "Signing Python.framework"
+            # Sign the Python binary inside the framework
+            codesign --force --options runtime --sign "$APPLE_SIGNING_IDENTITY" "$INTERNAL_DIR/Python.framework/Versions/Current/Python" 2>/dev/null || true
+            codesign --force --options runtime --sign "$APPLE_SIGNING_IDENTITY" "$INTERNAL_DIR/Python.framework/Python" 2>/dev/null || true
+            # Sign the framework itself
+            codesign --force --options runtime --sign "$APPLE_SIGNING_IDENTITY" "$INTERNAL_DIR/Python.framework"
+          fi
           
           # Sign the main executable
           codesign --force --options runtime --deep --sign "$APPLE_SIGNING_IDENTITY" --entitlements "$ENTITLEMENTS" "$DIST_DIR/mlx_server"
+          
+          # Verify signatures
+          echo "Verifying signatures..."
+          codesign --verify --verbose "$DIST_DIR/mlx_server"
 
       - name: Notarize the app
         working-directory: llm-server/macos/mlx/dist
