@@ -316,19 +316,14 @@ jobs:
           APPLE_ID_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          zip -r mlx_server.zip mlx_server
-          xcrun notarytool submit mlx_server.zip --apple-id "$APPLE_ID" --password "$APPLE_ID_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
-
-      - name: Package artifact
-        working-directory: llm-server/macos/mlx/dist
-        run: |
-          tar -czf mlx_server-macos.tar.gz mlx_server
+          zip -r mlx_server-macos.zip mlx_server
+          xcrun notarytool submit mlx_server-macos.zip --apple-id "$APPLE_ID" --password "$APPLE_ID_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
       
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: mlx-server-macos
-          path: llm-server/macos/mlx/dist/mlx_server-macos.tar.gz
+          path: llm-server/macos/mlx/dist/mlx_server-macos.zip
           retention-days: 30
 
   create-release:
