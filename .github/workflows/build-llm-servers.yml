@@ -307,7 +307,7 @@ jobs:
 
       - name: Build with PyInstaller
         working-directory: llm-server/macos/mlx
-        run: pyinstaller --codesign-identity "$APPLE_SIGNING_IDENTITY" --osx-entitlements-file entitlements.plist mlx_server.spec
+        run: pyinstaller mlx_server.spec
 
       - name: Notarize the app
         working-directory: llm-server/macos/mlx/dist
