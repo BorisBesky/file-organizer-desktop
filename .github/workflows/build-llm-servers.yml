@@ -385,7 +385,7 @@ jobs:
           APPLE_ID_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          zip -r mlx_server-macos.zip mlx_server
+          ditto -c -k --keepParent mlx_server mlx_server-macos.zip
           xcrun notarytool submit mlx_server-macos.zip --apple-id "$APPLE_ID" --password "$APPLE_ID_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
       
       - name: Upload artifact
