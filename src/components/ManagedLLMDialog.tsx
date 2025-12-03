@@ -87,7 +87,7 @@ export default function ManagedLLMDialog({ isOpen, onClose, onDownloadComplete }
               </select>
             </div>
             <div className="info-row">
-              <strong>Size:</strong> {navigator.userAgent.includes('Win') ? '~ 10 MB' : navigator.userAgent.includes('Mac') ? '~ 17 MB' : '~ 90 MB'}
+              <strong>Size:</strong> {navigator.userAgent.includes('Win') ? '~ 10 MB' : navigator.userAgent.includes('Mac') ? '~ 90 MB' : '~ 90 MB'}
             </div>
           </div>
 

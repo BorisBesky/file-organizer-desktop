@@ -18,6 +18,7 @@ use calamine::{Reader, open_workbook, Xlsx};
 use image::GenericImageView;
 use base64::Engine;
 use serde::{Deserialize, Serialize};
+#[cfg(not(unix))]
 use zip::ZipArchive;
 use flate2::read::GzDecoder;
 use tar::Archive;
@@ -836,32 +837,55 @@ async fn download_llm_server(app: AppHandle, version: String) -> Result<String, 
     }
 
     if filename.ends_with(".zip") {
-        // Extract ZIP file (Windows)
-        let file = fs::File::open(&archive_path)
-            .map_err(|e| format!("Failed to open ZIP file: {}", e))?;
-        let mut archive = ZipArchive::new(file)
-            .map_err(|e| format!("Failed to read ZIP archive: {}", e))?;
-
-        for i in 0..archive.len() {
-            let mut file = archive.by_index(i)
-                .map_err(|e| format!("Failed to read file from ZIP: {}", e))?;
-            let outpath = extract_path.join(file.name());
+        #[cfg(unix)]
+        {
+            // Use system unzip on Unix (macOS/Linux) - properly preserves symlinks and permissions
+            use std::process::Command;
             
-            if file.name().ends_with('/') {
-                fs::create_dir_all(&outpath)
-                    .map_err(|e| format!("Failed to create directory: {}", e))?;
-            } else {
-                if let Some(p) = outpath.parent() {
-                    fs::create_dir_all(p)
-                        .map_err(|e| format!("Failed to create parent directory: {}", e))?;
+            let output = Command::new("unzip")
+                .args(&["-o", archive_path.to_str().unwrap(), "-d", server_dir.to_str().unwrap()])
+                .output()
+                .map_err(|e| format!("Failed to run unzip: {}", e))?;
+            
+            if !output.status.success() {
+                return Err(format!(
+                    "Failed to extract ZIP: {}",
+                    String::from_utf8_lossy(&output.stderr)
+                ));
+            }
+            
+            eprintln!("Extracted ZIP using system unzip");
+        }
+        
+        #[cfg(not(unix))]
+        {
+            // Extract ZIP file using Rust library on Windows
+            let file = fs::File::open(&archive_path)
+                .map_err(|e| format!("Failed to open ZIP file: {}", e))?;
+            let mut archive = ZipArchive::new(file)
+                .map_err(|e| format!("Failed to read ZIP archive: {}", e))?;
+
+            for i in 0..archive.len() {
+                let mut file = archive.by_index(i)
+                    .map_err(|e| format!("Failed to read file from ZIP: {}", e))?;
+                let outpath = extract_path.join(file.name());
+                
+                if file.name().ends_with('/') {
+                    fs::create_dir_all(&outpath)
+                        .map_err(|e| format!("Failed to create directory: {}", e))?;
+                } else {
+                    if let Some(p) = outpath.parent() {
+                        fs::create_dir_all(p)
+                            .map_err(|e| format!("Failed to create parent directory: {}", e))?;
+                    }
+                    let mut outfile = fs::File::create(&outpath)
+                        .map_err(|e| format!("Failed to create file: {}", e))?;
+                    std::io::copy(&mut file, &mut outfile)
+                        .map_err(|e| format!("Failed to extract file: {}", e))?;
                 }
-                let mut outfile = fs::File::create(&outpath)
-                    .map_err(|e| format!("Failed to create file: {}", e))?;
-                std::io::copy(&mut file, &mut outfile)
-                    .map_err(|e| format!("Failed to extract file: {}", e))?;
             }
         }
-    } else {
+    } else if filename.ends_with(".tar.gz") {
         // Extract TAR.GZ file (Linux/macOS)
         let file = fs::File::open(&archive_path)
             .map_err(|e| format!("Failed to open TAR.GZ file: {}", e))?;
