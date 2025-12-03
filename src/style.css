@@ -369,6 +369,20 @@ body {
   cursor: not-allowed;
 }
 
+.existing-categories-preview {
+  margin-top: 8px;
+  padding: 8px;
+  background: var(--bg-tertiary);
+  border-radius: 4px;
+  border: 1px solid var(--border-primary);
+}
+
+.existing-categories-preview small {
+  font-size: calc(11px * var(--font-size-multiplier, 1));
+  color: var(--text-secondary);
+  word-break: break-word;
+}
+
 .content-section {
   display: flex;
   flex-direction: column;

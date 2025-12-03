@@ -248,13 +248,52 @@ async fn try_reconnect_orphaned_server(
     }
 }
 
+// OS-specific files to skip
+const OS_SPECIFIC_FILES: &[&str] = &[
+    ".DS_Store", ".ds_store",
+    "Thumbs.db", "thumbs.db",
+    "desktop.ini", "Desktop.ini",
+    ".Spotlight-V100", ".Trashes", ".fseventsd",
+    "ehthumbs.db", "ehthumbs_vista.db",
+    ".AppleDouble", ".LSOverride",
+    "Icon\r", ".DocumentRevisions-V100", ".TemporaryItems",
+    "$RECYCLE.BIN", "System Volume Information",
+];
+
+// OS-specific directories to skip
+const OS_SPECIFIC_DIRS: &[&str] = &[
+    ".Spotlight-V100", ".Trashes", ".fseventsd",
+    ".DocumentRevisions-V100", ".TemporaryItems",
+    "$RECYCLE.BIN", "System Volume Information",
+    "__MACOSX", ".AppleDouble",
+];
+
+fn is_hidden_or_os_file(name: &str) -> bool {
+    name.starts_with('.') || OS_SPECIFIC_FILES.contains(&name)
+}
+
+fn is_hidden_or_os_dir(name: &str) -> bool {
+    name.starts_with('.') || OS_SPECIFIC_DIRS.contains(&name)
+}
+
 #[command]
 async fn read_directory(path: String, include_subdirectories: bool) -> Result<Vec<String>, String> {
     if include_subdirectories {
-        let entries = WalkDir::new(path)
+        let entries = WalkDir::new(&path)
             .into_iter()
+            .filter_entry(|e| {
+                // Skip hidden directories and OS-specific directories
+                let name = e.file_name().to_string_lossy();
+                !is_hidden_or_os_dir(&name)
+            })
             .filter_map(|e| e.ok())
-            .filter(|e| e.path().is_file())
+            .filter(|e| {
+                if !e.path().is_file() {
+                    return false;
+                }
+                let name = e.file_name().to_string_lossy();
+                !is_hidden_or_os_file(&name)
+            })
             .map(|e| e.path().to_string_lossy().into_owned())
             .collect::<Vec<String>>();
         Ok(entries)
@@ -262,11 +301,40 @@ async fn read_directory(path: String, include_subdirectories: bool) -> Result<Ve
         let entries = fs::read_dir(path)
             .map_err(|e| e.to_string())?
             .filter_map(|res| res.ok())
-            .filter(|entry| entry.path().is_file())
+            .filter(|entry| {
+                if !entry.path().is_file() {
+                    return false;
+                }
+                let name = entry.file_name().to_string_lossy().to_string();
+                !is_hidden_or_os_file(&name)
+            })
             .map(|e| e.path().to_string_lossy().into_owned())
             .collect::<Vec<String>>();
         Ok(entries)
     }
+}
+
+#[command]
+async fn list_subdirectories(path: String) -> Result<Vec<String>, String> {
+    let base_path = Path::new(&path);
+    let entries: Vec<String> = WalkDir::new(&path)
+        .min_depth(1) // Skip the root directory itself
+        .into_iter()
+        .filter_entry(|e| {
+            // Skip hidden directories and OS-specific directories
+            let name = e.file_name().to_string_lossy();
+            !is_hidden_or_os_dir(&name)
+        })
+        .filter_map(|e| e.ok())
+        .filter(|e| e.path().is_dir())
+        .filter_map(|entry| {
+            // Get relative path from the base directory
+            entry.path().strip_prefix(base_path).ok().map(|rel| {
+                rel.to_string_lossy().to_string()
+            })
+        })
+        .collect();
+    Ok(entries)
 }
 
 #[command]
@@ -1297,6 +1365,7 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             read_directory,
+            list_subdirectories,
             pick_directory,
             read_file_content,
             move_file,

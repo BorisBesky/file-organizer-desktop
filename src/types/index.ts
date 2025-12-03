@@ -60,6 +60,8 @@ export interface SavedProcessedState {
   directory?: string; // For backwards compatibility
   directories?: string[]; // New field for multiple directories
   includeSubdirectories: boolean;
+  useExistingCategories?: boolean; // Whether to use existing subdirectories as categories
+  existingCategories?: string[]; // List of existing subdirectory names
   rows: Row[];
   processedFiles: any[];
   allFiles: string[];

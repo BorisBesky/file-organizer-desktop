@@ -29,6 +29,77 @@ function splitPath(p: string) {
   return { dir, name, ext };
 }
 
+// Get category based on file extension for non-text/non-image files
+function getExtensionBasedCategory(ext: string): string {
+  const extension = ext.toLowerCase().replace('.', '');
+  
+  const extensionCategories: Record<string, string> = {
+    // Archives
+    zip: 'Archives/Compressed',
+    rar: 'Archives/Compressed',
+    '7z': 'Archives/Compressed',
+    tar: 'Archives/Compressed',
+    gz: 'Archives/Compressed',
+    bz2: 'Archives/Compressed',
+    
+    // Audio
+    mp3: 'Media/Audio',
+    wav: 'Media/Audio',
+    flac: 'Media/Audio',
+    aac: 'Media/Audio',
+    ogg: 'Media/Audio',
+    m4a: 'Media/Audio',
+    wma: 'Media/Audio',
+    
+    // Video
+    mp4: 'Media/Video',
+    avi: 'Media/Video',
+    mkv: 'Media/Video',
+    mov: 'Media/Video',
+    wmv: 'Media/Video',
+    flv: 'Media/Video',
+    webm: 'Media/Video',
+    m4v: 'Media/Video',
+    
+    // Executables
+    exe: 'Applications/Windows',
+    msi: 'Applications/Windows',
+    dmg: 'Applications/macOS',
+    pkg: 'Applications/macOS',
+    app: 'Applications/macOS',
+    deb: 'Applications/Linux',
+    rpm: 'Applications/Linux',
+    appimage: 'Applications/Linux',
+    
+    // Fonts
+    ttf: 'Fonts/TrueType',
+    otf: 'Fonts/OpenType',
+    woff: 'Fonts/Web',
+    woff2: 'Fonts/Web',
+    
+    // 3D Models
+    obj: '3D_Models/Objects',
+    fbx: '3D_Models/FBX',
+    stl: '3D_Models/STL',
+    blend: '3D_Models/Blender',
+    
+    // Database
+    db: 'Data/Database',
+    sqlite: 'Data/Database',
+    sql: 'Data/Database',
+    
+    // Disk Images
+    iso: 'DiskImages/ISO',
+    img: 'DiskImages/Image',
+    
+    // Other binary
+    bin: 'Binary/Raw',
+    dat: 'Binary/Data',
+  };
+  
+  return extensionCategories[extension] || `Other/${extension.toUpperCase() || 'Unknown'}`;
+}
+
 function configsEqual(a?: LLMConfig, b?: LLMConfig) {
   if (!a || !b) return false;
   return (
@@ -129,6 +200,8 @@ export default function App() {
   });
   const [directories, setDirectories] = useState<string[]>([]);
   const [includeSubdirectories, setIncludeSubdirectories] = useState(false);
+  const [useExistingCategories, setUseExistingCategories] = useState(false);
+  const [existingCategories, setExistingCategories] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [events, setEvents] = useState<string[]>([]);
   const [rows, setRows] = useState<Row[]>([]);
@@ -501,6 +574,8 @@ export default function App() {
       const state: SavedProcessedState = {
         directories,
         includeSubdirectories,
+        useExistingCategories,
+        existingCategories,
         rows,
         processedFiles: scanControlRef.current.processedFiles,
         allFiles: scanControlRef.current.allFiles,
@@ -552,6 +627,8 @@ export default function App() {
       const dirs = state.directories || (state.directory ? [state.directory] : []);
       setDirectories(dirs);
       setIncludeSubdirectories(state.includeSubdirectories);
+      setUseExistingCategories(state.useExistingCategories || false);
+      setExistingCategories(state.existingCategories || []);
       setRows(state.rows);
       setProgress(state.progress);
       setScanState(state.scanState === 'scanning' ? 'stopped' : state.scanState);
@@ -587,6 +664,24 @@ export default function App() {
     } catch (error) {
       debugLogger.error('APP_STATE', 'Failed to clear processed files state', { error });
     }
+  };
+
+  // Scan directories to find existing subdirectories for use as categories
+  const scanExistingSubdirectories = async (): Promise<string[]> => {
+    const allSubdirs: Set<string> = new Set();
+    
+    for (const dir of directories) {
+      try {
+        const subdirs: string[] = await invoke('list_subdirectories', { path: dir });
+        subdirs.forEach(subdir => allSubdirs.add(subdir));
+      } catch (error: any) {
+        debugLogger.error('SCAN_SUBDIRS', `Failed to scan subdirectories for ${dir}`, { error });
+      }
+    }
+    
+    const result = Array.from(allSubdirs).sort();
+    debugLogger.info('SCAN_SUBDIRS', 'Found existing subdirectories', { count: result.length, subdirs: result });
+    return result;
   };
 
   const stopScan = () => {
@@ -681,47 +776,101 @@ export default function App() {
 
       setEvents((prev: string[]) => [`Reading ${f} (${reason})`, ...prev]);
       const info: any = { src: f, readable, reason };
+      const fileExt = '.' + (f.split('.').pop() || '');
+      const originalName = splitPath(f).name;
       
-      if (readable) {
-        setEvents((prev: string[]) => [`Classifying ${f}`, ...prev]);
-        let result;
-        try {
-          result = await classifyViaLLM({ 
-            config: llmConfig, 
-            text, 
-            originalName: splitPath(f).name, 
-            categoriesHint,
-            fileContent: fileContent || undefined,
-          });
-        } catch (e: any) {
-          result = { category_path: 'uncategorized', suggested_filename: splitPath(f).name, confidence: 0, raw: { error: e?.message || String(e) } };
-        }
-        const ext = '.' + (f.split('.').pop() || '');
-        const safe = sanitizeFilename(result.suggested_filename || splitPath(f).name);
-        const dir = sanitizeDirpath(result.category_path || 'uncategorized');
+      // Handle non-readable files (binary, unsupported) with extension-based categorization
+      if (!readable) {
+        const extCategory = getExtensionBasedCategory(fileExt);
+        setEvents((prev: string[]) => [`Categorizing ${f} by extension -> ${extCategory}`, ...prev]);
+        
+        info.llm = {
+          category_path: extCategory,
+          suggested_filename: originalName,
+          confidence: 0.5,
+          raw: { method: 'extension-based' }
+        };
+        
+        const safe = sanitizeFilename(originalName);
+        const dir = sanitizeDirpath(extCategory);
         const rootDir = findRootDirectory(f);
-        const dst = rootDir ? `${rootDir}/${dir}/${safe}${ext}` : `${dir}/${safe}${ext}`;
+        const dst = rootDir ? `${rootDir}/${dir}/${safe}${fileExt}` : `${dir}/${safe}${fileExt}`;
         let finalDst = dst;
         let j = 1;
         while (used.has(finalDst)) { 
-          finalDst = rootDir ? `${rootDir}/${dir}/${safe}-${j}${ext}` : `${dir}/${safe}-${j}${ext}`; 
+          finalDst = rootDir ? `${rootDir}/${dir}/${safe}-${j}${fileExt}` : `${dir}/${safe}-${j}${fileExt}`; 
           j += 1; 
         }
         used.add(finalDst);
-        info.llm = result;
         info.dst = finalDst;
         processedFiles.push(info);
-        setEvents((prev: string[]) => [`Classified ${f} -> ${dir} => ${finalDst}`, ...prev]);
         
         // Update rows from processedFiles to avoid duplicates
         setRows(processedFiles.map(convertToRow));
-      } else {
-        setEvents((prev: string[]) => [`Skipping ${f}: ${reason}`, ...prev]);
-        processedFiles.push(info);
-        
-        // Update rows from processedFiles to avoid duplicates
-        setRows(processedFiles.map(convertToRow));
+        continue;
       }
+      
+      // For readable files (text/images), use LLM classification
+      setEvents((prev: string[]) => [`Classifying ${f}`, ...prev]);
+      let result: { category_path: string; suggested_filename: string; confidence: number; raw?: any };
+      
+      // Build categories hint - use existing categories if enabled, otherwise use hints from already processed files
+      const effectiveCategoriesHint = useExistingCategories && existingCategories.length > 0 
+        ? existingCategories 
+        : categoriesHint;
+      
+      try {
+        result = await classifyViaLLM({ 
+          config: llmConfig, 
+          text, 
+          originalName: originalName, 
+          categoriesHint: effectiveCategoriesHint,
+          fileContent: fileContent || undefined,
+        });
+        
+        // If using existing categories, verify the result matches one of the existing categories
+        if (useExistingCategories && existingCategories.length > 0) {
+          const suggestedCategory = result.category_path?.split('/')[0] || '';
+          const matchesExisting = existingCategories.some(cat => 
+            cat.toLowerCase() === suggestedCategory.toLowerCase() ||
+            result.category_path?.toLowerCase().startsWith(cat.toLowerCase())
+          );
+          
+          if (!matchesExisting) {
+            // Find the best matching existing category
+            const bestMatch = existingCategories.find(cat => 
+              result.category_path?.toLowerCase().includes(cat.toLowerCase())
+            ) || existingCategories[0] || 'uncategorized';
+            
+            debugLogger.info('CLASSIFY', 'Adjusted category to match existing', { 
+              original: result.category_path, 
+              adjusted: bestMatch 
+            });
+            result.category_path = bestMatch;
+          }
+        }
+      } catch (e: any) {
+        result = { category_path: 'uncategorized', suggested_filename: originalName, confidence: 0, raw: { error: e?.message || String(e) } };
+      }
+      
+      const safe = sanitizeFilename(result.suggested_filename || originalName);
+      const dir = sanitizeDirpath(result.category_path || 'uncategorized');
+      const rootDir = findRootDirectory(f);
+      const dst = rootDir ? `${rootDir}/${dir}/${safe}${fileExt}` : `${dir}/${safe}${fileExt}`;
+      let finalDst = dst;
+      let j = 1;
+      while (used.has(finalDst)) { 
+        finalDst = rootDir ? `${rootDir}/${dir}/${safe}-${j}${fileExt}` : `${dir}/${safe}-${j}${fileExt}`; 
+        j += 1; 
+      }
+      used.add(finalDst);
+      info.llm = result;
+      info.dst = finalDst;
+      processedFiles.push(info);
+      setEvents((prev: string[]) => [`Classified ${f} -> ${dir} => ${finalDst}`, ...prev]);
+      
+      // Update rows from processedFiles to avoid duplicates
+      setRows(processedFiles.map(convertToRow));
     }
     
     // If we reach here, scan completed normally
@@ -812,6 +961,20 @@ export default function App() {
     setProgress({ current: 0, total: 0 });
 
     try {
+      // If using existing categories, scan subdirectories first
+      if (useExistingCategories) {
+        setEvents((prev: string[]) => ['Scanning for existing subdirectories...', ...prev]);
+        const subdirs = await scanExistingSubdirectories();
+        setExistingCategories(subdirs);
+        if (subdirs.length > 0) {
+          setEvents((prev: string[]) => [`Found ${subdirs.length} existing categories: ${subdirs.join(', ')}`, ...prev]);
+        } else {
+          setEvents((prev: string[]) => ['No existing subdirectories found, will use standard classification', ...prev]);
+        }
+      } else {
+        setExistingCategories([]);
+      }
+
       // Collect files from all selected directories
       let allFilesFromAllDirs: string[] = [];
       
@@ -976,8 +1139,6 @@ export default function App() {
     
     // Clear saved state after applying changes
     clearProcessedState();
-    setSavedSessionAvailable(false);
-    setShowSessionNotification(false);
   };
 
   const updateRow = (i: number, patch: Partial<Row>) => {
@@ -1009,6 +1170,8 @@ export default function App() {
     setEvents([]);
     setDirectories([]);
     setIncludeSubdirectories(false);
+    setUseExistingCategories(false);
+    setExistingCategories([]);
     setProgress({ current: 0, total: 0 });
     setBusy(false);
     setOptimizedCategories({ categories: new Set(), count: 0, total: 0 });
@@ -1381,6 +1544,20 @@ export default function App() {
                   />
                   Include subdirectories
                 </label>
+                <label className="mt8" title="Classify files into existing subdirectories only. Files that don't match will be categorized by extension.">
+                  <input 
+                    type="checkbox" 
+                    checked={useExistingCategories} 
+                    onChange={e => setUseExistingCategories(e.target.checked)}
+                    disabled={busy || scanState === 'scanning' || scanState === 'stopped'}
+                  />
+                  Use existing subdirectories as categories
+                </label>
+                {useExistingCategories && existingCategories.length > 0 && (
+                  <div className="existing-categories-preview">
+                    <small>Categories: {existingCategories.slice(0, 5).join(', ')}{existingCategories.length > 5 ? ` (+${existingCategories.length - 5} more)` : ''}</small>
+                  </div>
+                )}
               </div>
             </>
           )}
@@ -1398,7 +1575,7 @@ export default function App() {
               <div className="content-header">
                 <h2>Review & Edit Proposals</h2>
                 <div className="button-row">
-                  <button className="secondary" onClick={optimizeCategories} disabled={busy}>
+                  <button className="secondary" onClick={optimizeCategories} disabled={busy || useExistingCategories}>
                     Optimize Categories
                   </button>
                   <button onClick={applyMoves} disabled={busy}>Approve Selected</button>
