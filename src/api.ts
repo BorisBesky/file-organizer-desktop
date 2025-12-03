@@ -475,7 +475,7 @@ export async function classifyViaLLM(opts: {
 
   **Output Format**: Return ONLY valid JSON with these exact keys:
   {
-    "category_path": "Category/Subcategory",
+    "category_path": "one/of/the/existing/categories",
     "suggested_filename": "descriptive_name_here",
     "confidence": 0.85
   }
@@ -486,6 +486,7 @@ export async function classifyViaLLM(opts: {
         prompt = `${strictPromptTemplate}\n\nOriginal filename: ${originalName}`;
       } else {
         prompt = `${strictPromptTemplate}\n\nOriginal filename: ${originalName}\nContent (truncated to ${maxTextLength} chars):\n${text.slice(0, maxTextLength)}`;
+        debugLogger.debug('CLASSIFY_VIA_LLM', 'Built prompt for text content with existing categories', { promptPreview: prompt.slice(0, 500) });
       }
     } else {
       // Default mode (no existing categories enforced)
@@ -526,6 +527,7 @@ export async function classifyViaLLM(opts: {
         prompt = `${defaultPromptTemplate}\n\nOriginal filename: ${originalName}${hint}`;
       } else {
         prompt = `${defaultPromptTemplate}\n\nOriginal filename: ${originalName}\nContent (truncated to ${maxTextLength} chars):\n${text.slice(0, maxTextLength)}${hint}`;
+        debugLogger.debug('CLASSIFY_VIA_LLM', 'Built prompt for text content without existing categories', { promptPreview: prompt.slice(0, 500) });
       }
     }
   }

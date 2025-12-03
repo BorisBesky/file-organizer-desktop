@@ -202,6 +202,11 @@ export default function App() {
   const [includeSubdirectories, setIncludeSubdirectories] = useState(false);
   const [useExistingCategories, setUseExistingCategories] = useState(false);
   const [existingCategories, setExistingCategories] = useState<string[]>([]);
+  const existingCategoriesRef = useRef<string[]>([]);
+  const updateExistingCategories = (categories: string[]) => {
+    existingCategoriesRef.current = categories;
+    setExistingCategories(categories);
+  };
   const [busy, setBusy] = useState(false);
   const [events, setEvents] = useState<string[]>([]);
   const [rows, setRows] = useState<Row[]>([]);
@@ -628,7 +633,7 @@ export default function App() {
       setDirectories(dirs);
       setIncludeSubdirectories(state.includeSubdirectories);
       setUseExistingCategories(state.useExistingCategories || false);
-      setExistingCategories(state.existingCategories || []);
+      updateExistingCategories(state.existingCategories || []);
       setRows(state.rows);
       setProgress(state.progress);
       setScanState(state.scanState === 'scanning' ? 'stopped' : state.scanState);
@@ -815,8 +820,9 @@ export default function App() {
       let result: { category_path: string; suggested_filename: string; confidence: number; raw?: any };
       
       // Build categories hint - use existing categories if enabled, otherwise use hints from already processed files
-      const effectiveCategoriesHint = useExistingCategories && existingCategories.length > 0 
-        ? existingCategories 
+      const existingCategoriesList = existingCategoriesRef.current;
+      const effectiveCategoriesHint = useExistingCategories && existingCategoriesList.length > 0 
+        ? existingCategoriesList 
         : categoriesHint;
       
       try {
@@ -829,18 +835,18 @@ export default function App() {
         });
         
         // If using existing categories, verify the result matches one of the existing categories
-        if (useExistingCategories && existingCategories.length > 0) {
+        if (useExistingCategories && existingCategoriesList.length > 0) {
           const suggestedCategory = result.category_path?.split('/')[0] || '';
-          const matchesExisting = existingCategories.some(cat => 
+          const matchesExisting = existingCategoriesList.some(cat => 
             cat.toLowerCase() === suggestedCategory.toLowerCase() ||
             result.category_path?.toLowerCase().startsWith(cat.toLowerCase())
           );
           
           if (!matchesExisting) {
             // Find the best matching existing category
-            const bestMatch = existingCategories.find(cat => 
+            const bestMatch = existingCategoriesList.find(cat => 
               result.category_path?.toLowerCase().includes(cat.toLowerCase())
-            ) || existingCategories[0] || 'uncategorized';
+            ) || existingCategoriesList[0] || 'uncategorized';
             
             debugLogger.info('CLASSIFY', 'Adjusted category to match existing', { 
               original: result.category_path, 
@@ -965,14 +971,14 @@ export default function App() {
       if (useExistingCategories) {
         setEvents((prev: string[]) => ['Scanning for existing subdirectories...', ...prev]);
         const subdirs = await scanExistingSubdirectories();
-        setExistingCategories(subdirs);
+        updateExistingCategories(subdirs);
         if (subdirs.length > 0) {
           setEvents((prev: string[]) => [`Found ${subdirs.length} existing categories: ${subdirs.join(', ')}`, ...prev]);
         } else {
           setEvents((prev: string[]) => ['No existing subdirectories found, will use standard classification', ...prev]);
         }
       } else {
-        setExistingCategories([]);
+        updateExistingCategories([]);
       }
 
       // Collect files from all selected directories
@@ -1171,7 +1177,7 @@ export default function App() {
     setDirectories([]);
     setIncludeSubdirectories(false);
     setUseExistingCategories(false);
-    setExistingCategories([]);
+    updateExistingCategories([]);
     setProgress({ current: 0, total: 0 });
     setBusy(false);
     setOptimizedCategories({ categories: new Set(), count: 0, total: 0 });
