@@ -423,7 +423,73 @@ export async function classifyViaLLM(opts: {
     };
   }
   
-  const defaultPromptTemplate =
+  const hint = categoriesHint?.length ? `\n\nIMPORTANT: You MUST classify the file into one of the following existing categories. Do NOT create new categories.\nExisting categories:\n- ${categoriesHint.join('\n- ')}` : '';
+  const maxTextLength = config.maxTextLength || 4096;
+  
+  // Build prompt based on content type
+  let prompt: string;
+  
+  if (config.customPrompt) {
+    // Use custom prompt template with placeholder replacement
+    const contentType = fileContent?.image_base64 ? 'image' : 'text';
+    const contentPreview = fileContent?.image_base64 
+      ? '[Image data - see attached image]' 
+      : text.slice(0, maxTextLength);
+    
+    prompt = config.customPrompt
+      .replace(/\{filename\}/g, originalName)
+      .replace(/\{content\}/g, contentPreview)
+      .replace(/\{type\}/g, contentType)
+      .replace(/\{categories\}/g, categoriesHint.join(', '));
+    
+    // Add hint if not already included in custom prompt
+    if (hint && !config.customPrompt.includes('{categories}')) {
+      prompt += hint;
+    }
+  } else {
+    if (categoriesHint?.length) {
+      // Strict mode with existing categories
+      const strictPromptTemplate =
+ `You are a file organizer. Analyze the ${fileContent?.image_base64 ? 'image' : 'text content'} and provide classification and naming suggestions.
+
+  **Task 1: Category Classification**
+  - You MUST classify the file into one of the following existing categories.
+  - Do NOT create new categories.
+  - Do NOT modify the category names (preserve case and path).
+  - If the file does not fit any of the categories, use "Uncategorized".
+
+  **Allowed Categories:**
+  - ${categoriesHint.join('\n  - ')}
+  - Uncategorized
+
+  **Task 2: Filename Suggestion**
+  - Provide a descriptive filename base (no file extension) using lowercase with underscores
+  - Format: {primary_topic}_{entity}_{date_or_identifier}
+    - primary_topic: main subject (1-2 words, e.g., "invoice", "meeting_notes", "project_proposal")
+    - entity: company/person/organization if identifiable (e.g., "acme_corp", "john_smith")
+    - date_or_identifier: date in YYYY-MM-DD or unique identifier if present
+  - If any component is missing, omit it (minimum: just primary_topic)
+  - Examples: "invoice_acme_corp_2024-03-15", "recipe_chocolate_cake", "contract_freelance_2024"
+  - Keep total length under 50 characters
+  ${fileContent?.image_base64 ? '\n**For images**: Describe visible content, text, objects, or documents to determine category and filename.' : ''}
+
+  **Output Format**: Return ONLY valid JSON with these exact keys:
+  {
+    "category_path": "Category/Subcategory",
+    "suggested_filename": "descriptive_name_here",
+    "confidence": 0.85
+  }
+
+  Original filename: ${originalName}`;
+
+      if (fileContent?.image_base64) {
+        prompt = `${strictPromptTemplate}\n\nOriginal filename: ${originalName}`;
+      } else {
+        prompt = `${strictPromptTemplate}\n\nOriginal filename: ${originalName}\nContent (truncated to ${maxTextLength} chars):\n${text.slice(0, maxTextLength)}`;
+      }
+    } else {
+      // Default mode (no existing categories enforced)
+      const defaultPromptTemplate =
  `You are a file organizer. Analyze the ${fileContent?.image_base64 ? 'image' : 'text content'} and provide classification and naming suggestions.
 
   **Task 1: Category Classification**
@@ -456,37 +522,11 @@ export async function classifyViaLLM(opts: {
 
   Original filename: ${originalName}`;
 
-  const hint = categoriesHint?.length ? `\n\nExisting categories (prefer one of these if it matches the content of the file):\n- ${categoriesHint.join('\n- ')}` : '';
-  const maxTextLength = config.maxTextLength || 4096;
-  
-  // Build prompt based on content type
-  let prompt: string;
-  
-  if (config.customPrompt) {
-    // Use custom prompt template with placeholder replacement
-    const contentType = fileContent?.image_base64 ? 'image' : 'text';
-    const contentPreview = fileContent?.image_base64 
-      ? '[Image data - see attached image]' 
-      : text.slice(0, maxTextLength);
-    
-    prompt = config.customPrompt
-      .replace(/\{filename\}/g, originalName)
-      .replace(/\{content\}/g, contentPreview)
-      .replace(/\{type\}/g, contentType)
-      .replace(/\{categories\}/g, categoriesHint.join(', '));
-    
-    // Add hint if not already included in custom prompt
-    if (hint && !config.customPrompt.includes('{categories}')) {
-      prompt += hint;
-    }
-  } else {
-    // Use default prompt template
-    if (fileContent?.image_base64) {
-      // For images, just provide the original filename and instructions
-      prompt = `${defaultPromptTemplate}\n\nOriginal filename: ${originalName}${hint}`;
-    } else {
-      // For text content, include the text
-      prompt = `${defaultPromptTemplate}\n\nOriginal filename: ${originalName}\nContent (truncated to ${maxTextLength} chars):\n${text.slice(0, maxTextLength)}${hint}`;
+      if (fileContent?.image_base64) {
+        prompt = `${defaultPromptTemplate}\n\nOriginal filename: ${originalName}${hint}`;
+      } else {
+        prompt = `${defaultPromptTemplate}\n\nOriginal filename: ${originalName}\nContent (truncated to ${maxTextLength} chars):\n${text.slice(0, maxTextLength)}${hint}`;
+      }
     }
   }
 
