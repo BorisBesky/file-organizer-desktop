@@ -707,8 +707,9 @@ export default function App() {
                              suggestedName.toLowerCase().includes('undefined') ||
                              category.toLowerCase().includes('uncategorized');
 
-    
-    const newName = shouldUseOriginal ? name : sanitizeFilename(splitPath(suggestedName).name);
+    // Use suggestedName directly - it already has the extension removed
+    // Don't call splitPath() again as it would incorrectly truncate filenames with dots (e.g., version numbers)
+    const newName = shouldUseOriginal ? name : sanitizeFilename(suggestedName);
 
     return {
       src: p.src,
@@ -859,7 +860,9 @@ export default function App() {
         result = { category_path: 'uncategorized', suggested_filename: originalName, confidence: 0, raw: { error: e?.message || String(e) } };
       }
       
-      const safe = sanitizeFilename(result.suggested_filename ? splitPath(result.suggested_filename).name : originalName);
+      // Use suggested_filename directly - it already has the extension removed by the LLM
+      // Don't call splitPath() again as it would incorrectly truncate filenames with dots (e.g., version numbers)
+      const safe = sanitizeFilename(result.suggested_filename || originalName);
       const dir = sanitizeDirpath(result.category_path || 'uncategorized');
       const rootDir = findRootDirectory(f);
       const dst = rootDir ? `${rootDir}/${dir}/${safe}${fileExt}` : `${dir}/${safe}${fileExt}`;
