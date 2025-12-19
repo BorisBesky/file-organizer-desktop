@@ -20,7 +20,7 @@ function sanitizeDirpath(path: string) {
 }
 
 function splitPath(p: string) {
-  const i = p.lastIndexOf('/');
+  const i = Math.max(p.lastIndexOf('/'), p.lastIndexOf('\\'));
   const dir = i >= 0 ? p.slice(0, i) : '';
   const file = i >= 0 ? p.slice(i + 1) : p;
   const j = file.lastIndexOf('.');
@@ -708,7 +708,7 @@ export default function App() {
                              category.toLowerCase().includes('uncategorized');
 
     
-    const newName = shouldUseOriginal ? name : sanitizeFilename(suggestedName);
+    const newName = shouldUseOriginal ? name : sanitizeFilename(splitPath(suggestedName).name);
 
     return {
       src: p.src,
@@ -859,7 +859,7 @@ export default function App() {
         result = { category_path: 'uncategorized', suggested_filename: originalName, confidence: 0, raw: { error: e?.message || String(e) } };
       }
       
-      const safe = sanitizeFilename(result.suggested_filename || originalName);
+      const safe = sanitizeFilename(result.suggested_filename ? splitPath(result.suggested_filename).name : originalName);
       const dir = sanitizeDirpath(result.category_path || 'uncategorized');
       const rootDir = findRootDirectory(f);
       const dst = rootDir ? `${rootDir}/${dir}/${safe}${fileExt}` : `${dir}/${safe}${fileExt}`;
