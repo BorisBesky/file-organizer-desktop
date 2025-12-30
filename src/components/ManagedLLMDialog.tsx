@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { downloadManagedLLMServer } from '../api';
 
 interface ManagedLLMDialogProps {
@@ -12,14 +12,9 @@ export default function ManagedLLMDialog({ isOpen, onClose, onDownloadComplete, 
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [version, setVersion] = useState(latestVersion || '0.1.0');
   
-  // Update version when latestVersion prop changes
-  useEffect(() => {
-    if (latestVersion) {
-      setVersion(latestVersion);
-    }
-  }, [latestVersion]);
+  // Always use the latest version, fallback to '0.1.0' if not available
+  const version = latestVersion || '0.1.0';
 
   if (!isOpen) return null;
 
@@ -84,19 +79,7 @@ export default function ManagedLLMDialog({ isOpen, onClose, onDownloadComplete, 
               <strong>Platform:</strong> {navigator.userAgent.includes('Win') ? 'Windows' : navigator.userAgent.includes('Mac') ? 'macOS' : 'Linux'}
             </div>
             <div className="info-row">
-              <strong>Version:</strong> 
-              <select 
-                value={version} 
-                onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setVersion(e.target.value)}
-                disabled={isDownloading}
-                className="version-select"
-              >
-                {latestVersion ? (
-                  <option value={latestVersion}>v{latestVersion} (Latest)</option>
-                ) : (
-                  <option value="0.1.0">v0.1.0 (Latest)</option>
-                )}
-              </select>
+              <strong>Version:</strong> v{version} (Latest)
             </div>
             <div className="info-row">
               <strong>Size:</strong> {navigator.userAgent.includes('Win') ? '~ 10 MB' : navigator.userAgent.includes('Mac') ? '~ 90 MB' : '~ 90 MB'}

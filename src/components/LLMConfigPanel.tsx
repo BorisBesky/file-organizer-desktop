@@ -84,6 +84,9 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled, pro
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [updateCheckMessage, setUpdateCheckMessage] = useState<string | null>(null);
+  
+  // Server operation states
+  const [isStarting, setIsStarting] = useState(false);
 
   useEffect(() => {
     const newHeadersText = config.customHeaders ? JSON.stringify(config.customHeaders, null, 2) : '';
@@ -180,12 +183,15 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled, pro
   }, [currentManagedConfig.env_vars]);
 
   const handleStartServer = async () => {
+    setIsStarting(true);
     try {
       await startManagedLLMServer(currentManagedConfig);
       await loadManagedLLMStatus();
     } catch (error: any) {
       debugLogger.error('MANAGED_LLM', 'Failed to start server', { error });
       setTestMessage(`Failed to start server: ${error.message}`);
+    } finally {
+      setIsStarting(false);
     }
   };
 
@@ -756,9 +762,9 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled, pro
                       <button 
                         className="start-button"
                         onClick={handleStartServer}
-                        disabled={disabled || managedLLMStatus?.status === 'running'}
+                        disabled={disabled || managedLLMStatus?.status === 'running' || isStarting}
                       >
-                        Start Server
+                        {isStarting ? 'Starting...' : 'Start Server'}
                       </button>
                       <button 
                         className="stop-button"
