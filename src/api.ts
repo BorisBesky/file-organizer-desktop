@@ -830,3 +830,17 @@ export async function getManagedLLMServerInfo(): Promise<ManagedLLMServerInfo> {
     throw new Error(`Failed to get server info: ${error.message || String(error)}`);
   }
 }
+
+export interface LLMServerUpdateInfo {
+  latest_version?: string;
+  update_available: boolean;
+  current_version?: string;
+}
+
+export async function checkLLMServerUpdate(): Promise<LLMServerUpdateInfo> {
+  try {
+    return await invoke<LLMServerUpdateInfo>('check_llm_server_update');
+  } catch (error: any) {
+    throw new Error(`Failed to check for updates: ${error.message || String(error)}`);
+  }
+}

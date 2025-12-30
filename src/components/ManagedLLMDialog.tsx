@@ -1,17 +1,25 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { downloadManagedLLMServer } from '../api';
 
 interface ManagedLLMDialogProps {
   isOpen: boolean;
   onClose: () => void;
   onDownloadComplete: () => void;
+  latestVersion?: string;
 }
 
-export default function ManagedLLMDialog({ isOpen, onClose, onDownloadComplete }: ManagedLLMDialogProps) {
+export default function ManagedLLMDialog({ isOpen, onClose, onDownloadComplete, latestVersion }: ManagedLLMDialogProps) {
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [version, setVersion] = useState('0.1.0');
+  const [version, setVersion] = useState(latestVersion || '0.1.0');
+  
+  // Update version when latestVersion prop changes
+  useEffect(() => {
+    if (latestVersion) {
+      setVersion(latestVersion);
+    }
+  }, [latestVersion]);
 
   if (!isOpen) return null;
 
@@ -83,7 +91,11 @@ export default function ManagedLLMDialog({ isOpen, onClose, onDownloadComplete }
                 disabled={isDownloading}
                 className="version-select"
               >
-                <option value="0.1.0">v0.1.0 (Latest)</option>
+                {latestVersion ? (
+                  <option value={latestVersion}>v{latestVersion} (Latest)</option>
+                ) : (
+                  <option value="0.1.0">v0.1.0 (Latest)</option>
+                )}
               </select>
             </div>
             <div className="info-row">

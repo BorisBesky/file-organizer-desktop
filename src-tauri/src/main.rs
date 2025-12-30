@@ -692,8 +692,6 @@ async fn get_llm_server_status(app: AppHandle, state: State<'_, ManagedLLMState>
     } else if cfg!(target_os = "macos") {
         vec![
             server_dir.join("mlx_server").join("mlx_server"),
-            server_dir.join("mlx_server"),
-            server_dir.join("mlx_server").join("mlx_server").join("mlx_server"),
         ]
     } else {
         vec![
@@ -732,6 +730,10 @@ async fn get_llm_server_status(app: AppHandle, state: State<'_, ManagedLLMState>
         }
     };
 
+    // Try to read stored version, fallback to hardcoded "1.0.0" if not found
+    let stored_version = read_downloaded_version(&app_data_dir)
+        .or_else(|| Some("1.0.0".to_string()));
+
     // Get the host and port from the stored config, or use defaults
     let (host, port) = {
         let state_guard = state.lock().unwrap();
@@ -757,7 +759,7 @@ async fn get_llm_server_status(app: AppHandle, state: State<'_, ManagedLLMState>
             if status_code.is_success() {
                 Ok(ManagedLLMServerInfo {
                     status: "running".to_string(),
-                    version: Some("1.0.0".to_string()), // TODO: Get actual version
+                    version: stored_version.clone(),
                     path: Some(server_exe.to_string_lossy().to_string()),
                     port: Some(port),
                     error: None,
@@ -766,7 +768,7 @@ async fn get_llm_server_status(app: AppHandle, state: State<'_, ManagedLLMState>
                 eprintln!("Server responded but with error status: {}", status_code);
                 Ok(ManagedLLMServerInfo {
                     status: "downloaded".to_string(),
-                    version: Some("1.0.0".to_string()),
+                    version: stored_version.clone(),
                     path: Some(server_exe.to_string_lossy().to_string()),
                     port: Some(port),
                     error: Some(format!("Server responded with status: {}", status_code)),
@@ -777,7 +779,7 @@ async fn get_llm_server_status(app: AppHandle, state: State<'_, ManagedLLMState>
             eprintln!("Failed to connect to server: {}", e);
             Ok(ManagedLLMServerInfo {
                 status: "downloaded".to_string(),
-                version: Some("1.0.0".to_string()),
+                version: stored_version.clone(),
                 path: Some(server_exe.to_string_lossy().to_string()),
                 port: Some(port),
                 error: Some(format!("Connection failed: {}", e)),
@@ -996,6 +998,11 @@ async fn download_llm_server(app: AppHandle, version: String) -> Result<String, 
         perms.set_mode(0o755);
         fs::set_permissions(&server_exe, perms)
             .map_err(|e| format!("Failed to set executable permissions: {}", e))?;
+    }
+
+    // Store the downloaded version
+    if let Err(e) = store_downloaded_version(&app_data_dir, &version) {
+        eprintln!("Warning: Failed to store version metadata: {}", e);
     }
 
     Ok(extract_path.to_string_lossy().to_string())
@@ -1217,6 +1224,159 @@ async fn get_llm_server_info(app: AppHandle, state: State<'_, ManagedLLMState>) 
     get_llm_server_status(app, state).await
 }
 
+// Helper function to parse semantic version string (e.g., "1.2.3")
+fn parse_version(version_str: &str) -> Option<(u32, u32, u32)> {
+    let cleaned = version_str.trim().trim_start_matches('v');
+    let parts: Vec<&str> = cleaned.split('.').collect();
+    if parts.len() >= 3 {
+        let major = parts[0].parse::<u32>().ok()?;
+        let minor = parts[1].parse::<u32>().ok()?;
+        let patch = parts[2].parse::<u32>().ok()?;
+        Some((major, minor, patch))
+    } else {
+        None
+    }
+}
+
+// Compare two semantic versions
+// Returns: Some(true) if version1 > version2, Some(false) if version1 <= version2, None if invalid
+fn compare_versions(version1: &str, version2: &str) -> Option<bool> {
+    let v1 = parse_version(version1)?;
+    let v2 = parse_version(version2)?;
+    
+    if v1.0 > v2.0 {
+        Some(true)
+    } else if v1.0 < v2.0 {
+        Some(false)
+    } else if v1.1 > v2.1 {
+        Some(true)
+    } else if v1.1 < v2.1 {
+        Some(false)
+    } else if v1.2 > v2.2 {
+        Some(true)
+    } else {
+        Some(false) // Equal versions
+    }
+}
+
+// Fetch latest llm-server version from GitHub releases
+async fn check_llm_server_latest_version() -> Result<Option<String>, String> {
+    let client = reqwest::Client::new();
+    let url = "https://api.github.com/repos/BorisBesky/file-organizer-desktop/releases";
+    
+    let response = client
+        .get(url)
+        .header("User-Agent", "file-organizer-desktop")
+        .send()
+        .await
+        .map_err(|e| format!("Failed to fetch releases: {}", e))?;
+    
+    if !response.status().is_success() {
+        return Err(format!("GitHub API returned status: {}", response.status()));
+    }
+    
+    let releases: Vec<serde_json::Value> = response
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse releases JSON: {}", e))?;
+    
+    // Find the latest release with tag starting with "llm-v"
+    for release in releases {
+        if let Some(tag_name) = release["tag_name"].as_str() {
+            if tag_name.starts_with("llm-v") {
+                // Extract version from tag (e.g., "llm-v1.0.0" -> "1.0.0")
+                let version = tag_name.strip_prefix("llm-v").unwrap_or(tag_name);
+                return Ok(Some(version.to_string()));
+            }
+        }
+    }
+    
+    Ok(None)
+}
+
+// Response type for update check
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LLMServerUpdateInfo {
+    pub latest_version: Option<String>,
+    pub update_available: bool,
+    pub current_version: Option<String>,
+}
+
+#[command]
+async fn check_llm_server_update(
+    app: AppHandle,
+    state: State<'_, ManagedLLMState>
+) -> Result<LLMServerUpdateInfo, String> {
+    // Get current installed version
+    let status = get_llm_server_status(app, state).await?;
+    let current_version = status.version.clone();
+    
+    // Fetch latest version from GitHub
+    let latest_version = match check_llm_server_latest_version().await {
+        Ok(Some(version)) => Some(version),
+        Ok(None) => {
+            eprintln!("No llm-v* releases found on GitHub");
+            None
+        }
+        Err(e) => {
+            eprintln!("Failed to check for updates: {}", e);
+            None
+        }
+    };
+    
+    // Determine if update is available
+    let update_available = match (&current_version, &latest_version) {
+        (Some(current), Some(latest)) => {
+            match compare_versions(latest, current) {
+                Some(true) => true, // latest > current
+                _ => false,
+            }
+        }
+        (None, Some(_)) => true, // No current version but latest exists
+        _ => false, // No latest version or both None
+    };
+    
+    Ok(LLMServerUpdateInfo {
+        latest_version,
+        update_available,
+        current_version,
+    })
+}
+
+// Helper function to get version metadata file path
+fn get_version_metadata_path(app_data_dir: &std::path::PathBuf) -> std::path::PathBuf {
+    app_data_dir.join("llm-server").join("version.json")
+}
+
+// Store version after download
+fn store_downloaded_version(app_data_dir: &std::path::PathBuf, version: &str) -> Result<(), String> {
+    let version_file = get_version_metadata_path(app_data_dir);
+    let version_data = serde_json::json!({
+        "version": version,
+        "downloaded_at": std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs()
+    });
+    
+    fs::write(&version_file, version_data.to_string())
+        .map_err(|e| format!("Failed to write version file: {}", e))?;
+    
+    Ok(())
+}
+
+// Read stored version
+fn read_downloaded_version(app_data_dir: &std::path::PathBuf) -> Option<String> {
+    let version_file = get_version_metadata_path(app_data_dir);
+    if !version_file.exists() {
+        return None;
+    }
+    
+    let version_data = fs::read_to_string(&version_file).ok()?;
+    let version_json: serde_json::Value = serde_json::from_str(&version_data).ok()?;
+    version_json["version"].as_str().map(|s| s.to_string())
+}
+
 fn create_menu() -> Menu {
     let help_menu = Menu::new()
         .add_item(CustomMenuItem::new("show_help".to_string(), "File Organizer Help"))
@@ -1376,7 +1536,8 @@ fn main() {
             download_llm_server,
             start_llm_server,
             stop_llm_server,
-            get_llm_server_info
+            get_llm_server_info,
+            check_llm_server_update
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
