@@ -65,6 +65,41 @@ jobs:
             echo "Using fallback version placeholder"
           fi
 
+      - name: Update version files
+        if: steps.version.outputs.version != '__VERSION__'
+        shell: bash
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          echo "Updating version files to: $VERSION"
+          
+          # Update Cargo.toml
+          if [ "$(uname)" = "Darwin" ]; then
+            # macOS
+            sed -i '' "s/^version = \".*\"/version = \"$VERSION\"/" src-tauri/Cargo.toml
+          else
+            # Linux/Windows
+            sed -i "s/^version = \".*\"/version = \"$VERSION\"/" src-tauri/Cargo.toml
+          fi
+          echo "Updated Cargo.toml:"
+          grep "^version = " src-tauri/Cargo.toml
+          
+          # Update package.json using Python (available on all GitHub runners)
+          python3 << EOF
+          import json
+          import sys
+          
+          with open('package.json', 'r') as f:
+              pkg = json.load(f)
+          
+          pkg['version'] = '$VERSION'
+          
+          with open('package.json', 'w') as f:
+              json.dump(pkg, f, indent=2)
+              f.write('\n')
+          EOF
+          echo "Updated package.json:"
+          grep "\"version\":" package.json
+
       - name: Determine if this platform should run
         id: check
         shell: bash
@@ -132,21 +167,6 @@ jobs:
           workspaces: './src-tauri -> target'
           shared-key: ${{ matrix.platform == 'macos-latest' && 'universal-macos' || '' }}
           cache-all-crates: true
-
-      - name: Update Cargo.toml version
-        if: ${{ steps.check.outputs.run == 'true' && steps.version.outputs.version != '__VERSION__' }}
-        shell: bash
-        run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          if [ "$(uname)" = "Darwin" ]; then
-            # macOS
-            sed -i '' "s/^version = \".*\"/version = \"$VERSION\"/" src-tauri/Cargo.toml
-          else
-            # Linux/Windows
-            sed -i "s/^version = \".*\"/version = \"$VERSION\"/" src-tauri/Cargo.toml
-          fi
-          echo "Updated Cargo.toml version to: $VERSION"
-          cat src-tauri/Cargo.toml | grep "^version ="
 
       - name: Install dependencies (npm)
         if: ${{ steps.check.outputs.run == 'true' }}
