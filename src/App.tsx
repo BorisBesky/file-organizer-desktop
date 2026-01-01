@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react';
-import { classifyViaLLM, optimizeCategoriesViaLLM, LLMConfig, DEFAULT_CONFIGS, LLMProviderType, openFile, FileContent } from './api';
+import { classifyViaLLM, optimizeCategoriesViaLLM, LLMConfig, DEFAULT_CONFIGS, LLMProviderType, openFile, FileContent, checkLLMServerUpdate } from './api';
 import { invoke } from '@tauri-apps/api/tauri';
 import { listen } from '@tauri-apps/api/event';
 import { ScanState, ManagedLLMConfig, SavedProcessedState } from './types';
@@ -222,6 +222,18 @@ export default function App() {
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [showOptimizationResult, setShowOptimizationResult] = useState(false);
   const optimizationCancelRef = useRef(false);
+  
+  // LLM update check state
+  const [autoCheckUpdates, setAutoCheckUpdates] = useState(() => {
+    try {
+      const saved = localStorage.getItem('autoCheckLLMUpdates');
+      return saved ? JSON.parse(saved) : true;
+    } catch {
+      return true;
+    }
+  });
+  const [toastMessage, setToastMessage] = useState<{ message: string; type: 'info' | 'success' | 'error' } | null>(null);
+  const toastTimeoutRef = useRef<number | null>(null);
   
   // Sorting state
   const [sortBy, setSortBy] = useState<SortField>('source');
@@ -621,6 +633,59 @@ export default function App() {
 
   // Removed the directory-selected event listener since we now use direct invoke
 
+  // Show toast notification
+  const showToast = (message: string, type: 'info' | 'success' | 'error' = 'info') => {
+    setToastMessage({ message, type });
+    if (toastTimeoutRef.current) {
+      window.clearTimeout(toastTimeoutRef.current);
+    }
+    toastTimeoutRef.current = window.setTimeout(() => {
+      setToastMessage(null);
+    }, 4000);
+  };
+
+  // Handle LLM update check
+  const handleCheckLLMUpdate = async () => {
+    showToast('Checking for LLM server updates...', 'info');
+    try {
+      const updateInfo = await checkLLMServerUpdate();
+      
+      if (updateInfo.update_available && updateInfo.latest_version) {
+        showToast(
+          `Update available: v${updateInfo.latest_version} (current: v${updateInfo.current_version || 'unknown'})`,
+          'success'
+        );
+      } else if (updateInfo.latest_version) {
+        showToast(
+          `You have the latest version (v${updateInfo.current_version || updateInfo.latest_version})`,
+          'success'
+        );
+      } else {
+        showToast('Unable to check for updates', 'error');
+      }
+      
+      debugLogger.debug('LLM_UPDATE', 'Update check completed', { 
+        latestVersion: updateInfo.latest_version,
+        updateAvailable: updateInfo.update_available,
+        currentVersion: updateInfo.current_version
+      });
+    } catch (error: any) {
+      debugLogger.error('LLM_UPDATE', 'Failed to check for updates', { error });
+      showToast(`Failed to check for updates: ${error.message || 'Unknown error'}`, 'error');
+    }
+  };
+
+  // Handle toggle auto-check updates
+  const handleToggleAutoCheckUpdates = () => {
+    const newValue = !autoCheckUpdates;
+    setAutoCheckUpdates(newValue);
+    localStorage.setItem('autoCheckLLMUpdates', JSON.stringify(newValue));
+    showToast(
+      `Auto-check updates on startup ${newValue ? 'enabled' : 'disabled'}`,
+      'success'
+    );
+  };
+
   useEffect(() => {
     const unlistenHelp = listen('show-help', () => {
       setHelpOpen(true);
@@ -628,11 +693,30 @@ export default function App() {
     const unlistenAbout = listen('show-about', () => {
       setAboutOpen(true);
     });
+    const unlistenCheckUpdate = listen('check-llm-update', () => {
+      handleCheckLLMUpdate();
+    });
+    const unlistenToggleAutoCheck = listen('toggle-auto-check-updates', () => {
+      handleToggleAutoCheckUpdates();
+    });
     return () => {
       unlistenHelp.then(f => f());
       unlistenAbout.then(f => f());
+      unlistenCheckUpdate.then(f => f());
+      unlistenToggleAutoCheck.then(f => f());
     };
   }, []);
+
+  // Auto-check for LLM updates on startup (if enabled and using managed-local)
+  useEffect(() => {
+    if (autoCheckUpdates && llmConfig.provider === 'managed-local') {
+      // Small delay to let the app settle
+      const timer = setTimeout(() => {
+        handleCheckLLMUpdate();
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, []); // Only run once on mount
 
   // Check for saved session on mount and auto-restore
   useEffect(() => {
@@ -1856,6 +1940,43 @@ export default function App() {
               cursor: 'pointer',
               fontSize: '1.2rem',
               lineHeight: 1,
+            }}
+          >
+            ×
+          </button>
+        </div>
+      )}
+      {toastMessage && (
+        <div
+          style={{
+            position: 'fixed',
+            top: '20px',
+            right: '20px',
+            backgroundColor: toastMessage.type === 'error' ? '#f44336' : toastMessage.type === 'success' ? '#4caf50' : '#2196f3',
+            color: '#fff',
+            padding: '12px 20px',
+            borderRadius: '4px',
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
+            zIndex: 10000,
+            maxWidth: '400px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            animation: 'slideInRight 0.3s ease-out',
+          }}
+        >
+          <span style={{ flex: 1 }}>{toastMessage.message}</span>
+          <button
+            onClick={() => setToastMessage(null)}
+            aria-label="Close toast"
+            style={{
+              background: 'transparent',
+              color: '#fff',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: '1.2rem',
+              lineHeight: 1,
+              padding: '0',
             }}
           >
             ×

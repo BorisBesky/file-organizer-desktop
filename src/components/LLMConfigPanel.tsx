@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { LLMConfig, LLMProviderType, DEFAULT_CONFIGS, listOllamaModels, listLMStudioModels, getManagedLLMServerStatus, startManagedLLMServer, stopManagedLLMServer, getManagedLLMServerInfo, checkLLMServerUpdate } from '../api';
+import { LLMConfig, LLMProviderType, DEFAULT_CONFIGS, listOllamaModels, listLMStudioModels, getManagedLLMServerStatus, startManagedLLMServer, stopManagedLLMServer, getManagedLLMServerInfo } from '../api';
 import { ManagedLLMServerInfo, ManagedLLMConfig } from '../types';
 import ManagedLLMDialog from './ManagedLLMDialog';
 import { debugLogger } from '../debug-logger';
@@ -80,12 +80,6 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled, pro
   const [serverConfigExpanded, setServerConfigExpanded] = useState(false);
   const [envVars, setEnvVars] = useState<Array<{key: string, value: string}>>([]);
   
-  // Update check state
-  const [latestVersion, setLatestVersion] = useState<string | null>(null);
-  const [updateAvailable, setUpdateAvailable] = useState(false);
-  const [checkingUpdate, setCheckingUpdate] = useState(false);
-  const [updateCheckMessage, setUpdateCheckMessage] = useState<string | null>(null);
-  
   // Server operation states
   const [isStarting, setIsStarting] = useState(false);
 
@@ -133,41 +127,10 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled, pro
     }
   }, [downloadDialogCancelled]);
 
-  const checkForUpdate = React.useCallback(async () => {
-    setCheckingUpdate(true);
-    setUpdateCheckMessage(null);
-    try {
-      const updateInfo = await checkLLMServerUpdate();
-      setLatestVersion(updateInfo.latest_version || null);
-      setUpdateAvailable(updateInfo.update_available);
-      
-      if (updateInfo.update_available && updateInfo.latest_version) {
-        setUpdateCheckMessage(`Update available: v${updateInfo.latest_version} (current: v${updateInfo.current_version || 'unknown'})`);
-      } else if (updateInfo.latest_version) {
-        setUpdateCheckMessage(`You have the latest version (v${updateInfo.current_version || updateInfo.latest_version})`);
-      } else {
-        setUpdateCheckMessage('Unable to check for updates');
-      }
-      
-      debugLogger.debug('MANAGED_LLM', 'Update check completed', { 
-        latestVersion: updateInfo.latest_version,
-        updateAvailable: updateInfo.update_available,
-        currentVersion: updateInfo.current_version
-      });
-    } catch (error: any) {
-      debugLogger.error('MANAGED_LLM', 'Failed to check for updates', { error });
-      setUpdateCheckMessage(`Failed to check for updates: ${error.message || 'Unknown error'}`);
-    } finally {
-      setCheckingUpdate(false);
-    }
-  }, []);
-
   // Load managed LLM status when provider is managed-local and panel is expanded
   useEffect(() => {
     if (config.provider === 'managed-local' && isExpanded) {
       loadManagedLLMStatus();
-      // Check for updates automatically when panel is opened
-      checkForUpdate();
       
       // Set up periodic status refresh to keep UI in sync
       const intervalId = setInterval(() => {
@@ -180,7 +143,7 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled, pro
         debugLogger.debug('MANAGED_LLM', 'Stopped managed LLM status polling', {});
       };
     }
-  }, [config.provider, isExpanded, loadManagedLLMStatus, checkForUpdate]);
+  }, [config.provider, isExpanded, loadManagedLLMStatus]);
 
   // Initialize env vars from config
   useEffect(() => {
@@ -794,12 +757,6 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled, pro
                           )}
                         </>
                       )}
-                      {updateCheckMessage && (
-                        <>
-                          {managedLLMStatus.port && <br />}
-                          <strong>Update Check:</strong> {updateCheckMessage}
-                        </>
-                      )}
                     </div>
                   </div>
                 )}
@@ -832,30 +789,8 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled, pro
                       >
                         Stop Server
                       </button>
-                      {updateAvailable && (
-                        <button 
-                          className="download-button"
-                          onClick={() => {
-                            setDownloadDialogCancelled(false);
-                            setShowDownloadDialog(true);
-                          }}
-                          disabled={disabled}
-                          title={`Update available: v${latestVersion}`}
-                          style={{ marginLeft: '0.5rem' }}
-                        >
-                          Update to {latestVersion}
-                        </button>
-                      )}
                     </>
                   )}
-                  <button
-                    className="check-update-button"
-                    onClick={checkForUpdate}
-                    disabled={disabled || checkingUpdate}
-                    style={{ marginLeft: '0.5rem' }}
-                  >
-                    {checkingUpdate ? 'Checking...' : 'Check for Updates'}
-                  </button>
                 </div>
               </div>
 
@@ -941,10 +876,7 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled, pro
         onDownloadComplete={() => {
           setDownloadDialogCancelled(false);
           loadManagedLLMStatus();
-          // Recheck for updates after download
-          checkForUpdate();
         }}
-        latestVersion={latestVersion || undefined}
       />
     </div>
   );
