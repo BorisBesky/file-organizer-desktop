@@ -230,13 +230,6 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled, pro
 
     // Apply defaults for the provider in the UI (optimistic)
     const defaultCfg = DEFAULT_CONFIGS[config.provider] || {};
-    onChange({
-      ...config,
-      provider: config.provider,
-      baseUrl: defaultCfg.baseUrl || '',
-      model: defaultCfg.model || '',
-      apiKey: ''
-    });
     
     // Reset managed-local specific settings to defaults
     if (config.provider === 'managed-local' && onManagedLLMConfigChange) {
@@ -253,6 +246,23 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled, pro
       max_tokens: defaultManagedConfig.max_tokens,
       max_text_length: defaultManagedConfig.max_text_length,
       env_vars: {}
+      });
+      
+      // For managed-local, sync the model field to llmConfig
+      onChange({
+        ...config,
+        provider: config.provider,
+        baseUrl: defaultCfg.baseUrl || '',
+        model: defaultManagedConfig.model || '',
+        apiKey: ''
+      });
+    } else {
+      onChange({
+        ...config,
+        provider: config.provider,
+        baseUrl: defaultCfg.baseUrl || '',
+        model: defaultCfg.model || '',
+        apiKey: ''
       });
     }
   };
