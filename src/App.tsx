@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react';
-import { classifyViaLLM, optimizeCategoriesViaLLM, LLMConfig, DEFAULT_CONFIGS, openFile, FileContent } from './api';
+import { classifyViaLLM, optimizeCategoriesViaLLM, LLMConfig, DEFAULT_CONFIGS, LLMProviderType, openFile, FileContent } from './api';
 import { invoke } from '@tauri-apps/api/tauri';
 import { listen } from '@tauri-apps/api/event';
 import { ScanState, ManagedLLMConfig, SavedProcessedState } from './types';
@@ -156,8 +156,8 @@ export default function App() {
 
   const [llmConfig, setLlmConfig] = useState<LLMConfig>(loadLlmConfig());
   const [providerConfigs, setProviderConfigs] = useState<Record<string, LLMConfig>>(loadProviderConfigs());
-  const defaultModel = (navigator.userAgent.includes('Mac') ? 'mlx-community/Phi-3.5-mini-instruct-4bit' : 'MaziyarPanahi/gemma-3-1b-it-GGUF');
-  const defaultModelFilename = (navigator.userAgent.includes('Mac') ? 'Phi-3.5-mini-instruct-4bit.mlx' : 'gemma-3-1b-it-GGUF.gguf');
+  const defaultModel = (navigator.userAgent.includes('Mac') ? 'mlx-community/gemma-3n-E4B-it-lm-4bit' : 'MaziyarPanahi/gemma-3-1b-it-GGUF');
+  const defaultModelFilename = (navigator.userAgent.includes('Mac') ? '' : 'gemma-3-1b-it-GGUF.gguf');
   
   // Track if we've already attempted to start the server to prevent duplicates
   const serverStartAttempted = useRef(false);
@@ -510,6 +510,113 @@ export default function App() {
     if (savedConfig) {
       setLlmConfig(savedConfig);
     }
+  };
+
+  // Snackbar state for undo actions
+  const [snackbarVisible, setSnackbarVisible] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
+  const [snackbarActionLabel, setSnackbarActionLabel] = useState<string | null>(null);
+  const snackbarTimeoutRef = useRef<number | null>(null);
+  const snackbarOnActionRef = useRef<(() => void) | null>(null);
+
+  const hideSnackbar = () => {
+    setSnackbarVisible(false);
+    setSnackbarMessage('');
+    setSnackbarActionLabel(null);
+    if (snackbarTimeoutRef.current) {
+      window.clearTimeout(snackbarTimeoutRef.current);
+      snackbarTimeoutRef.current = null;
+    }
+    snackbarOnActionRef.current = null;
+  };
+
+  const showSnackbar = (message: string, actionLabel: string | null, onAction?: () => void, duration = 5000) => {
+    // Clear any existing snackbar
+    if (snackbarTimeoutRef.current) {
+      window.clearTimeout(snackbarTimeoutRef.current);
+      snackbarTimeoutRef.current = null;
+    }
+    snackbarOnActionRef.current = onAction || null;
+    setSnackbarMessage(message);
+    setSnackbarActionLabel(actionLabel);
+    setSnackbarVisible(true);
+    snackbarTimeoutRef.current = window.setTimeout(() => {
+      hideSnackbar();
+    }, duration) as unknown as number;
+  };
+
+  const resetProviderConfig = (provider: string) => {
+    // Capture previous state for undo
+    const prevProviderConfigs = { ...providerConfigs };
+    const prevLlmConfig = { ...llmConfig };
+    const prevManagedConfig = { ...managedLLMConfig };
+
+    // Remove saved config
+    setProviderConfigs(prev => {
+      if (!(provider in prev)) return prev;
+      const updated = { ...prev };
+      delete updated[provider];
+      try {
+        localStorage.setItem('llmProviderConfigs', JSON.stringify(updated));
+      } catch (err) {
+        debugLogger.error('APP_CONFIG', 'Failed to save provider configs to localStorage', { err });
+      }
+      return updated;
+    });
+
+    // If currently using this provider, apply defaults immediately and clear related fields
+    if (llmConfig.provider === provider) {
+      const defaultCfg = DEFAULT_CONFIGS[provider as LLMProviderType] || {};
+      const standardDefaults = {
+        maxTokens: 4096,
+        maxTextLength: 4096,
+        systemMessage: 'Return only valid JSON (no markdown), with keys: category_path, suggested_filename, confidence (0-1).',
+        customHeaders: undefined,
+        supportsVision: false,
+        apiKey: undefined,
+      } as Partial<LLMConfig>;
+
+      setLlmConfig(prev => ({
+        ...prev,
+        provider: provider as LLMProviderType,
+        baseUrl: defaultCfg.baseUrl || '',
+        model: defaultCfg.model || '',
+        ...standardDefaults,
+      } as LLMConfig));
+
+      // If resetting managed-local provider, also reset Managed LLM config to defaults
+      if (provider === 'managed-local') {
+        const defaultModel = (navigator.userAgent.includes('Mac') ? 'mlx-community/gemma-3n-E4B-it-lm-4bit' : 'MaziyarPanahi/gemma-3-1b-it-GGUF');
+        const defaultModelFilename = (navigator.userAgent.includes('Mac') ? '' : 'gemma-3-1b-it-GGUF.gguf');
+        setManagedLLMConfig({
+          port: 8000,
+          host: '127.0.0.1',
+          model: defaultModel,
+          model_filename: defaultModelFilename,
+          log_level: 'info',
+          env_vars: {}
+        });
+      }
+    }
+
+    setEvents(prev => [`Reset ${provider} provider to defaults`, ...prev]);
+
+    // Show undo snackbar
+    showSnackbar(`Reset ${provider} to defaults`, 'Undo', () => {
+      // Restore previous state
+      setProviderConfigs(prevProviderConfigs);
+      try {
+        localStorage.setItem('llmProviderConfigs', JSON.stringify(prevProviderConfigs));
+      } catch (err) {
+        debugLogger.error('APP_CONFIG', 'Failed to restore provider configs to localStorage', { err });
+      }
+      setLlmConfig(prevLlmConfig);
+      if (provider === 'managed-local') {
+        setManagedLLMConfig(prevManagedConfig);
+      }
+      setEvents(prev => [`Restored ${provider} configuration (undo)`, ...prev]);
+      hideSnackbar();
+    });
   };
 
   // Removed the directory-selected event listener since we now use direct invoke
@@ -1518,6 +1625,7 @@ export default function App() {
                 disabled={busy}
                 providerConfigs={providerConfigs}
                 onLoadProviderConfig={loadProviderConfig}
+                onResetProviderConfig={resetProviderConfig}
                 managedLLMConfig={managedLLMConfig}
                 onManagedLLMConfigChange={setManagedLLMConfig}
               />
@@ -1699,6 +1807,61 @@ export default function App() {
       {/* Help and About Dialogs */}
       <HelpDialog isOpen={helpOpen} onClose={() => setHelpOpen(false)} />
       <AboutDialog isOpen={aboutOpen} onClose={() => setAboutOpen(false)} />
+
+      {/* Snackbar for undo actions */}
+      {snackbarVisible && (
+        <div
+          role="status"
+          aria-live="polite"
+          style={{
+            position: 'fixed',
+            right: '20px',
+            bottom: '20px',
+            background: '#333',
+            color: '#fff',
+            padding: '10px 14px',
+            borderRadius: '6px',
+            boxShadow: '0 6px 18px rgba(0,0,0,0.25)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            zIndex: 9999,
+          }}
+        >
+          <div style={{ fontSize: '0.95rem' }}>{snackbarMessage}</div>
+          {snackbarActionLabel && (
+            <button
+              onClick={() => {
+                if (snackbarOnActionRef.current) snackbarOnActionRef.current();
+              }}
+              style={{
+                background: 'transparent',
+                color: '#ffd54f',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                borderRadius: '4px',
+                padding: '6px 10px',
+                cursor: 'pointer'
+              }}
+            >
+              {snackbarActionLabel}
+            </button>
+          )}
+          <button
+            onClick={hideSnackbar}
+            aria-label="Dismiss notification"
+            style={{
+              background: 'transparent',
+              color: '#fff',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: '1.2rem',
+              lineHeight: 1,
+            }}
+          >
+            ×
+          </button>
+        </div>
+      )}
     </div>
   );
 }

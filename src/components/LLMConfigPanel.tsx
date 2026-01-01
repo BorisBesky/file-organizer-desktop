@@ -12,6 +12,7 @@ interface LLMConfigPanelProps {
   disabled?: boolean;
   providerConfigs?: Record<string, LLMConfig>;
   onLoadProviderConfig?: (provider: string) => void;
+  onResetProviderConfig?: (provider: string) => void;
   managedLLMConfig?: ManagedLLMConfig;
   onManagedLLMConfigChange?: (config: ManagedLLMConfig) => void;
 }
@@ -59,7 +60,7 @@ const PROVIDER_INFO: Record<LLMProviderType, { name: string; description: string
   },
 };
 
-export default function LLMConfigPanel({ config, onChange, onTest, disabled, providerConfigs = {}, onLoadProviderConfig, managedLLMConfig, onManagedLLMConfigChange }: LLMConfigPanelProps) {
+export default function LLMConfigPanel({ config, onChange, onTest, disabled, providerConfigs = {}, onLoadProviderConfig, onResetProviderConfig, managedLLMConfig, onManagedLLMConfigChange }: LLMConfigPanelProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [advancedExpanded, setAdvancedExpanded] = useState(false);
   const [availableModels, setAvailableModels] = useState<string[]>([]);
@@ -252,6 +253,22 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled, pro
     }
   };
 
+  const handleResetProvider = () => {
+    if (!onResetProviderConfig) return;
+    // Optimistically reset and show undo via snackbar in App
+    onResetProviderConfig(config.provider);
+
+    // Apply defaults for the provider in the UI (optimistic)
+    const defaultCfg = DEFAULT_CONFIGS[config.provider] || {};
+    onChange({
+      ...config,
+      provider: config.provider,
+      baseUrl: defaultCfg.baseUrl || '',
+      model: defaultCfg.model || '',
+      apiKey: defaultCfg.apiKey || undefined,
+    });
+  };
+
   // Fetch available local models when provider or baseUrl changes
   useEffect(() => {
     let mounted = true;
@@ -336,10 +353,23 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled, pro
                 })}
               </select>
             </label>
-            <div className="config-hint">
-              {currentProviderInfo.description}
-              {providerConfigs[config.provider] && (
-                <span style={{ color: '#007aff', fontWeight: '500' }}> • Saved configuration</span>
+            <div className="config-hint" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <div style={{ flex: 1 }}>
+                {currentProviderInfo.description}
+                {providerConfigs[config.provider] && (
+                  <span style={{ color: '#007aff', fontWeight: '500' }}> • Saved configuration</span>
+                )}
+              </div>
+              {providerConfigs[config.provider] && onResetProviderConfig && (
+                <button
+                  className="directory-remove-btn"
+                  onClick={handleResetProvider}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleResetProvider(); } }}
+                  title="Reset provider to defaults and remove saved configuration"
+                  aria-label={`Reset ${config.provider} provider to defaults`}
+                >
+                  ×
+                </button>
               )}
             </div>
           </div>

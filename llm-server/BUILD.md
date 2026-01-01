@@ -127,7 +127,7 @@ Configuration priority: **command-line args > environment variables > defaults**
 - `SERVER_HOST` - Host to listen on (default: 127.0.0.1)
 - `SERVER_PORT` - Port to listen on (default: 8000)
 - `SERVER_LOG_LEVEL` - Log level (default: info)
-- `SERVER_MODEL` - Model to use (default: mlx-community/Phi-3.5-mini-instruct-4bit)
+- `SERVER_MODEL` - Model to use (default: mlx-community/gemma-3n-E4B-it-lm-4bit)
 
 **Llama servers** (Windows/Linux):
 - `SERVER_FILENAME` - Model filename
