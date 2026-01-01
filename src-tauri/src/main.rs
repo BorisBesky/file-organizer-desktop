@@ -674,6 +674,20 @@ async fn open_file(path: String) -> Result<(), String> {
 
 // Managed LLM Server Commands
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AppVersionInfo {
+    pub version: String,
+    pub build_timestamp: String,
+}
+
+#[command]
+fn get_app_version() -> AppVersionInfo {
+    AppVersionInfo {
+        version: env!("CARGO_PKG_VERSION").to_string(),
+        build_timestamp: env!("BUILD_TIMESTAMP").to_string(),
+    }
+}
+
 #[command]
 async fn get_llm_server_status(app: AppHandle, state: State<'_, ManagedLLMState>) -> Result<ManagedLLMServerInfo, String> {
     let app_data_dir = app.path_resolver()
@@ -1532,6 +1546,7 @@ fn main() {
             http_request,
             save_diagnostic_logs,
             open_file,
+            get_app_version,
             get_llm_server_status,
             download_llm_server,
             start_llm_server,

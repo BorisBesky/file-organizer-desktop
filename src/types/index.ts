@@ -53,6 +53,13 @@ export interface ManagedLLMConfig {
   mmproj_repo_id?: string;
   mmproj_filename?: string;
   chat_format?: string;
+  max_tokens?: number;
+  max_text_length?: number;
+  system_prompt?: string;
+  custom_files_prompt?: string;
+  custom_categories_prompt?: string;
+  custom_headers?: string;
+  supports_vision?: boolean;
 }
 
 // Saved processed files state for persistence

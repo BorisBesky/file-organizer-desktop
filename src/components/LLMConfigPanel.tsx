@@ -107,6 +107,13 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled, pro
     model: defaultModel,
     model_filename: defaultModelFilename,
     log_level: 'info',
+    chat_format: undefined,
+    mmproj_repo_id: undefined,
+    mmproj_filename: undefined,
+    model_path: undefined,
+    max_tokens: 4096,
+    max_text_length: 10240,
+
     env_vars: {}
   };
 
@@ -265,8 +272,26 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled, pro
       provider: config.provider,
       baseUrl: defaultCfg.baseUrl || '',
       model: defaultCfg.model || '',
-      apiKey: defaultCfg.apiKey || undefined,
+      apiKey: ''
     });
+    
+    // Reset managed-local specific settings to defaults
+    if (config.provider === 'managed-local' && onManagedLLMConfigChange) {
+      onManagedLLMConfigChange({
+      port: defaultManagedConfig.port,
+      host: defaultManagedConfig.host,
+      model: defaultManagedConfig.model,
+      model_filename: defaultManagedConfig.model_filename,
+      log_level: 'info',
+      chat_format: undefined,
+      mmproj_repo_id: undefined,
+      mmproj_filename: undefined,
+      model_path: undefined,
+      max_tokens: defaultManagedConfig.max_tokens,
+      max_text_length: defaultManagedConfig.max_text_length,
+      env_vars: {}
+      });
+    }
   };
 
   // Fetch available local models when provider or baseUrl changes
@@ -360,17 +385,6 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled, pro
                   <span style={{ color: '#007aff', fontWeight: '500' }}> • Saved configuration</span>
                 )}
               </div>
-              {providerConfigs[config.provider] && onResetProviderConfig && (
-                <button
-                  className="directory-remove-btn"
-                  onClick={handleResetProvider}
-                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleResetProvider(); } }}
-                  title="Reset provider to defaults and remove saved configuration"
-                  aria-label={`Reset ${config.provider} provider to defaults`}
-                >
-                  ×
-                </button>
-              )}
             </div>
           </div>
 
@@ -415,18 +429,18 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled, pro
                     className="config-input"
                     value={config.model}
                     onChange={(e) => onChange({ ...config, model: e.target.value })}
-                    placeholder="e.g., gpt-4-turbo-preview"
+                    placeholder="e.g., gpt-5.2"
                     disabled={disabled}
                   />
                 )}
               </label>
               <div className="config-hint">
-                {config.provider === 'openai' && 'Examples: gpt-4-turbo-preview, gpt-3.5-turbo'}
-                {config.provider === 'anthropic' && 'Examples: claude-3-5-sonnet-20241022, claude-3-opus-20240229'}
-                {config.provider === 'ollama' && 'Examples: llama2, mistral, codellama'}
-                {config.provider === 'groq' && 'Examples: llama-3.1-70b-versatile, mixtral-8x7b-32768'}
-                {config.provider === 'gemini' && 'Examples: gemini-2.0-flash-exp, gemini-1.5-pro, gemini-1.5-flash'}
-                {config.provider === 'lmstudio' && 'Use the model name from your LM Studio server'}
+                {config.provider === 'openai' && 'Examples: , gpt-5-mini, , gpt-5.2'}
+                {config.provider === 'anthropic' && 'Examples: claude-opus-4-5, claude-sonnet-4-5'}
+                {config.provider === 'ollama' && 'Use one of the models available in your Ollama installation'}
+                {config.provider === 'groq' && 'Examples: openai/gpt-oss-120b, llama-3-70b-8192'}
+                {config.provider === 'gemini' && 'Examples: gemini-3.0-flash-preview, gemini-3.0-pro'}
+                {config.provider === 'lmstudio' && 'Use one of the models available in your LM Studio server'}
               </div>
             </div>
 
@@ -622,6 +636,19 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled, pro
                       </select>
                     </label>
                   </div>
+                  <div>
+                    {providerConfigs[config.provider] && onResetProviderConfig && (
+                      <button
+                        className="reset-button"
+                        onClick={handleResetProvider}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleResetProvider(); } }}
+                        title="Reset provider to defaults and remove saved configuration"
+                        aria-label={`Reset ${config.provider} provider to defaults`}
+                      >
+                        Reset to Defaults
+                      </button>
+                    )}
+                  </div>
                   {!isMac && (
                   <div className="config-section">
                     <label className="config-label">
@@ -729,6 +756,8 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled, pro
                       </div>
                     </>
                   )}
+                  
+                  
                 </>
               )}
             </div>
@@ -814,7 +843,7 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled, pro
                           title={`Update available: v${latestVersion}`}
                           style={{ marginLeft: '0.5rem' }}
                         >
-                          Update to v{latestVersion}
+                          Update to {latestVersion}
                         </button>
                       )}
                     </>

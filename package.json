@@ -3,12 +3,16 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "A cross-platform file organizer application using React and Tauri.",
+  "description": "A cross-platform AI assisted file organizer application.",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",
+    "prebuild": "node scripts/sync-version.cjs",
+    "version:sync": "node scripts/sync-version.cjs",
+    "version:validate": "node scripts/validate-version.cjs",
+    "version:bump": "node scripts/bump-version.cjs",
     "test:ollama": "ts-node --esm tests/ollama-response.test.ts",
     "test:lmstudio": "ts-node --esm tests/lmstudio-connection.test.ts",
     "test:custom-llm": "ts-node --esm tests/custom-llm-with-headers.test.ts",
@@ -37,6 +41,6 @@
     "react",
     "tauri"
   ],
-  "author": "Your Name",
+  "author": "Boris Besky",
   "license": "MIT"
 }

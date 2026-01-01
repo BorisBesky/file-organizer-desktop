@@ -1,11 +1,27 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { invoke } from '@tauri-apps/api';
 
 interface AboutDialogProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
+interface AppVersionInfo {
+  version: string;
+  build_timestamp: string;
+}
+
 export default function AboutDialog({ isOpen, onClose }: AboutDialogProps) {
+  const [versionInfo, setVersionInfo] = useState<AppVersionInfo | null>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      invoke<AppVersionInfo>('get_app_version')
+        .then(setVersionInfo)
+        .catch(err => console.error('Failed to fetch version:', err));
+    }
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   return (
@@ -18,8 +34,13 @@ export default function AboutDialog({ isOpen, onClose }: AboutDialogProps) {
         
         <div className="modal-body about-content">
           <div className="about-icon">📁</div>
-          <h3>AI File Organizer</h3>
-          <p className="version">Version 0.1.0</p>
+          <h3>Automatic AI File Organizer</h3>
+          <p className="version">
+            Version {versionInfo?.version || 'Loading...'}
+            {versionInfo?.build_timestamp && (
+              <span className="build-timestamp"> ({versionInfo.build_timestamp})</span>
+            )}
+          </p>
           <p className="description">
             An intelligent file organization assistant powered by AI.
             Automatically categorize and rename your files using advanced language models,
@@ -41,8 +62,7 @@ export default function AboutDialog({ isOpen, onClose }: AboutDialogProps) {
           </div>
 
           <div className="about-footer-info">
-            <p>Built with Tauri, React, and TypeScript</p>
-            <p className="copyright">© 2025 File Organizer</p>
+            <p className="copyright">© 2026 File Organizer</p>
           </div>
         </div>
 

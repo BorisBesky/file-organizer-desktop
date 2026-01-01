@@ -53,7 +53,7 @@ export const DEFAULT_CONFIGS: Record<LLMProviderType, Partial<LLMConfig>> = {
   lmstudio: {
     provider: 'lmstudio',
     baseUrl: 'http://localhost:1234',
-    model: 'local-model',
+    model: 'gpt-oss-20b',
   },
   ollama: {
     provider: 'ollama',
@@ -63,22 +63,22 @@ export const DEFAULT_CONFIGS: Record<LLMProviderType, Partial<LLMConfig>> = {
   openai: {
     provider: 'openai',
     baseUrl: 'https://api.openai.com',
-    model: 'gpt-4-turbo-preview',
+    model: 'gpt-5.2',
   },
   anthropic: {
     provider: 'anthropic',
     baseUrl: 'https://api.anthropic.com',
-    model: 'claude-3-5-sonnet-20241022',
+    model: 'claude-sonnet-4-5',
   },
   groq: {
     provider: 'groq',
     baseUrl: 'https://api.groq.com/openai',
-    model: 'llama-3.1-70b-versatile',
+    model: 'mixtral-8x7b-32768',
   },
   gemini: {
     provider: 'gemini',
     baseUrl: 'https://generativelanguage.googleapis.com',
-    model: 'gemini-2.0-flash-exp',
+    model: 'gemini-3-flash',
   },
   custom: {
     provider: 'custom',
@@ -88,11 +88,11 @@ export const DEFAULT_CONFIGS: Record<LLMProviderType, Partial<LLMConfig>> = {
   'managed-local': {
     provider: 'managed-local',
     baseUrl: 'http://127.0.0.1:8000',
-    model: 'local-model',
+    model: '',
   },
 };
 
-// Helper functions for multi-provider support
+// Helper fnctions for multi-provider support
 function getCompletionEndpoint(config: LLMConfig): string {
   const base = config.baseUrl.replace(/\/$/, '');
   
