@@ -1711,7 +1711,7 @@ select.config-input option {
 }
 
 .stop-button {
-  background-color: var(--accent-red);
+  background-color: var(--accent-blue);
   color: var(--text-primary);
   border: none;
   padding: 6px 12px;
