@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api';
-import { checkLLMServerUpdate, LLMServerUpdateInfo } from '../api';
+import { open as openUrl } from '@tauri-apps/api/shell';
+import { checkLLMServerUpdate, LLMServerUpdateInfo, checkAppUpdate, AppUpdateInfo } from '../api';
 import ManagedLLMDialog from './ManagedLLMDialog';
 import { ManagedLLMConfig } from '../types';
 
@@ -29,6 +30,7 @@ export default function AboutDialog({
   const [versionInfo, setVersionInfo] = useState<AppVersionInfo | null>(null);
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<LLMServerUpdateInfo | null>(null);
+  const [appUpdateInfo, setAppUpdateInfo] = useState<AppUpdateInfo | null>(null);
   const [updateError, setUpdateError] = useState<string | null>(null);
   const [showDownloadDialog, setShowDownloadDialog] = useState(false);
 
@@ -40,6 +42,7 @@ export default function AboutDialog({
       
       // Reset update state when dialog opens
       setUpdateInfo(null);
+      setAppUpdateInfo(null);
       setUpdateError(null);
     }
   }, [isOpen]);
@@ -48,10 +51,19 @@ export default function AboutDialog({
     setCheckingUpdate(true);
     setUpdateError(null);
     setUpdateInfo(null);
+    setAppUpdateInfo(null);
     
     try {
-      const info = await checkLLMServerUpdate();
-      setUpdateInfo(info);
+      // Check both app and LLM server updates in parallel
+      const [appInfo, llmInfo] = await Promise.all([
+        checkAppUpdate(),
+        llmProvider === 'managed-local' ? checkLLMServerUpdate() : Promise.resolve(null)
+      ]);
+      
+      setAppUpdateInfo(appInfo);
+      if (llmInfo) {
+        setUpdateInfo(llmInfo);
+      }
     } catch (error: any) {
       setUpdateError(error.message || 'Failed to check for updates');
     } finally {
@@ -105,67 +117,86 @@ export default function AboutDialog({
               </div>
             </div>
 
-            {/* Update Status Messages */}
-            {llmProvider === 'managed-local' && (updateInfo || updateError) && (
+            {/* Update Status Messages - Unified for App and LLM */}
+            {(appUpdateInfo || updateInfo || updateError) && (
               <div className="modal-body" style={{ paddingTop: 0 }}>
-                {updateInfo && (
-                  <div className={`update-message ${updateInfo.update_available ? 'update-available' : 'up-to-date'}`}>
-                    {updateInfo.update_available && updateInfo.latest_version ? (
-                      <>
-                        <div>
-                          <strong>Update available!</strong>
+                <div className="updates-section">
+                  <h4 style={{ marginTop: 0, marginBottom: '12px' }}>Updates</h4>
+                  
+                  {/* App Update Status */}
+                  {appUpdateInfo && (
+                    <div className={`update-message ${appUpdateInfo.update_available ? 'update-available' : 'up-to-date'}`}>
+                      <strong>File Organizer:</strong>
+                      {appUpdateInfo.update_available && appUpdateInfo.latest_version ? (
+                        <>
+                          {' '}Update available! Version {appUpdateInfo.latest_version} (current: {appUpdateInfo.current_version})
                           <br />
-                          Version {updateInfo.latest_version} (current: {updateInfo.current_version || 'unknown'})
-                        </div>
-                        <button 
-                          className="button-primary" 
-                          onClick={() => setShowDownloadDialog(true)}
-                          style={{ marginTop: '8px' }}
-                        >
-                          Download Update
-                        </button>
-                      </>
-                    ) : updateInfo.latest_version ? (
-                      <>
-                        <strong>You're up to date!</strong>
-                        <br />
-                        Version {updateInfo.current_version || updateInfo.latest_version}
-                      </>
-                    ) : (
-                      'Unable to determine update status'
-                    )}
-                  </div>
-                )}
-                
-                {updateError && (
-                  <div className="update-message error">
-                    {updateError}
-                  </div>
-                )}
+                          <button 
+                            className="button-primary"
+                            onClick={async () => {
+                              await openUrl('https://github.com/BorisBesky/file-organizer-desktop/releases/latest');
+                            }}
+                            style={{ marginTop: '8px' }}
+                          >
+                            Download from GitHub →
+                          </button>
+                        </>
+                      ) : (
+                        ` You're up to date! Version ${appUpdateInfo.current_version}`
+                      )}
+                    </div>
+                  )}
+                  
+                  {/* LLM Server Update Status */}
+                  {llmProvider === 'managed-local' && updateInfo && (
+                    <div className={`update-message ${updateInfo.update_available ? 'update-available' : 'up-to-date'}`}>
+                      <strong>LLM Server:</strong>
+                      {updateInfo.update_available && updateInfo.latest_version ? (
+                        <>
+                          {' '}Update available! Version {updateInfo.latest_version} (current: {updateInfo.current_version || 'unknown'})
+                          <br />
+                          <button 
+                            className="button-primary" 
+                            onClick={() => setShowDownloadDialog(true)}
+                            style={{ marginTop: '8px' }}
+                          >
+                            Download Update
+                          </button>
+                        </>
+                      ) : updateInfo.latest_version ? (
+                        ` You're up to date! Version ${updateInfo.current_version || updateInfo.latest_version}`
+                      ) : (
+                        ' Unable to determine update status'
+                      )}
+                    </div>
+                  )}
+                  
+                  {updateError && (
+                    <div className="update-message error">
+                      {updateError}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
             <div className="modal-footer about-footer-with-checkbox">
-              {llmProvider === 'managed-local' && (
-                <label className="checkbox-label" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <input
-                    type="checkbox"
-                    checked={autoCheckUpdates}
-                    onChange={onToggleAutoCheckUpdates}
-                  />
-                  <span>Auto-check for updates on startup</span>
-                </label>
-              )}
+              <label className="checkbox-label" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <input
+                  type="checkbox"
+                  checked={autoCheckUpdates}
+                  onChange={onToggleAutoCheckUpdates}
+                />
+                <span>Auto-check for updates on startup</span>
+              </label>
               <div className="footer-buttons">
-                {llmProvider === 'managed-local' && (
-                  <button 
-                    className="button-secondary" 
-                    onClick={handleCheckForUpdates}
-                    disabled={checkingUpdate}
-                  >
-                    {checkingUpdate ? 'Checking...' : 'Check for Updates'}
-                  </button>
-                )}
+                <button 
+                  className="button-secondary" 
+                  onClick={handleCheckForUpdates}
+                  disabled={checkingUpdate}
+                >
+                  {checkingUpdate ? 'Checking...' : 'Check for Updates'}
+                </button>
                 <button className="button-primary" onClick={onClose}>Close</button>
               </div>
             </div>

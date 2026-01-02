@@ -1428,8 +1428,8 @@ fn compare_versions(version1: &str, version2: &str) -> Option<bool> {
     }
 }
 
-// Fetch latest llm-server version from GitHub releases
-async fn check_llm_server_latest_version() -> Result<Option<String>, String> {
+// Generic function to fetch latest version from GitHub releases by tag prefix
+async fn check_latest_version_by_prefix(tag_prefix: &str) -> Result<Option<String>, String> {
     let client = reqwest::Client::new();
     let url = "https://api.github.com/repos/BorisBesky/file-organizer-desktop/releases";
     
@@ -1486,8 +1486,18 @@ async fn check_llm_server_latest_version() -> Result<Option<String>, String> {
         }
     }
     
-    eprintln!("Final latest version: {:?}", latest_version);
+    eprintln!("Final latest {} version: {:?}", tag_prefix, latest_version);
     Ok(latest_version)
+}
+
+// Convenience wrapper for app version check
+async fn check_app_latest_version() -> Result<Option<String>, String> {
+    check_latest_version_by_prefix("app-v").await
+}
+
+// Convenience wrapper for LLM server version check
+async fn check_llm_server_latest_version() -> Result<Option<String>, String> {
+    check_latest_version_by_prefix("llm-v").await
 }
 
 // Response type for update check
@@ -1496,6 +1506,14 @@ pub struct LLMServerUpdateInfo {
     pub latest_version: Option<String>,
     pub update_available: bool,
     pub current_version: Option<String>,
+}
+
+// Response type for app update check
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AppUpdateInfo {
+    pub latest_version: Option<String>,
+    pub update_available: bool,
+    pub current_version: String,
 }
 
 #[command]
@@ -1533,6 +1551,42 @@ async fn check_llm_server_update(
     };
     
     Ok(LLMServerUpdateInfo {
+        latest_version,
+        update_available,
+        current_version,
+    })
+}
+
+#[command]
+async fn check_app_update() -> Result<AppUpdateInfo, String> {
+    // Get current app version from Cargo.toml
+    let current_version = env!("CARGO_PKG_VERSION").to_string();
+    
+    // Fetch latest version from GitHub
+    let latest_version = match check_app_latest_version().await {
+        Ok(Some(version)) => Some(version),
+        Ok(None) => {
+            eprintln!("No v* releases found on GitHub");
+            None
+        }
+        Err(e) => {
+            eprintln!("Failed to check for app updates: {}", e);
+            None
+        }
+    };
+    
+    // Determine if update is available
+    let update_available = match &latest_version {
+        Some(latest) => {
+            match compare_versions(latest, &current_version) {
+                Some(true) => true, // latest > current
+                _ => false,
+            }
+        }
+        None => false,
+    };
+    
+    Ok(AppUpdateInfo {
         latest_version,
         update_available,
         current_version,
@@ -1735,7 +1789,8 @@ fn main() {
             start_llm_server,
             stop_llm_server,
             get_llm_server_info,
-            check_llm_server_update
+            check_llm_server_update,
+            check_app_update
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

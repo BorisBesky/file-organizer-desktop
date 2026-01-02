@@ -1,6 +1,6 @@
 [package]
 name = "file-organizer-desktop"
-version = "1.0.0"
+version = "0.1.0"
 description = "A file organizer application built with React and Tauri"
 authors = ["You"]
 license = "MIT"

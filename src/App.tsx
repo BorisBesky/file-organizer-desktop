@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react';
-import { classifyViaLLM, optimizeCategoriesViaLLM, LLMConfig, DEFAULT_CONFIGS, LLMProviderType, openFile, FileContent, checkLLMServerUpdate } from './api';
+import { classifyViaLLM, optimizeCategoriesViaLLM, LLMConfig, DEFAULT_CONFIGS, LLMProviderType, openFile, FileContent, checkLLMServerUpdate, checkAppUpdate } from './api';
 import { invoke } from '@tauri-apps/api/tauri';
 import { listen } from '@tauri-apps/api/event';
+import { open as openUrl } from '@tauri-apps/api/shell';
 import { ScanState, ManagedLLMConfig, SavedProcessedState } from './types';
 import { LLMConfigPanel, HelpDialog, AboutDialog, ManagedLLMDialog } from './components';
 import { debugLogger } from './debug-logger';
@@ -226,7 +227,7 @@ export default function App() {
   // LLM update check state
   const [autoCheckUpdates, setAutoCheckUpdates] = useState(() => {
     try {
-      const saved = localStorage.getItem('autoCheckLLMUpdates');
+      const saved = localStorage.getItem('autoCheckUpdates');
       return saved ? JSON.parse(saved) : true;
     } catch {
       return true;
@@ -650,7 +651,7 @@ export default function App() {
   const handleToggleAutoCheckUpdates = () => {
     const newValue = !autoCheckUpdates;
     setAutoCheckUpdates(newValue);
-    localStorage.setItem('autoCheckLLMUpdates', JSON.stringify(newValue));
+    localStorage.setItem('autoCheckUpdates', JSON.stringify(newValue));
   };
 
   useEffect(() => {
@@ -666,37 +667,55 @@ export default function App() {
     };
   }, []);
 
-  // Auto-check for LLM updates on startup (if enabled and using managed-local)
+  // Auto-check for updates on startup (if enabled)
   useEffect(() => {
-    if (autoCheckUpdates && llmConfig.provider === 'managed-local') {
+    if (autoCheckUpdates) {
       // Small delay to let the app settle
       const timer = setTimeout(async () => {
         try {
-          const updateInfo = await checkLLMServerUpdate();
-          if (updateInfo.update_available && updateInfo.latest_version) {
-            setPendingUpdateVersion(updateInfo.latest_version);
+          // Check app updates
+          const appUpdateInfo = await checkAppUpdate();
+          if (appUpdateInfo.update_available && appUpdateInfo.latest_version) {
             showToast(
-              `LLM Server update available: v${updateInfo.latest_version}`,
+              `File Organizer update available: v${appUpdateInfo.latest_version}`,
               'info',
               {
-                label: 'Download',
-                onClick: () => {
+                label: 'View',
+                onClick: async () => {
+                  await openUrl('https://github.com/BorisBesky/file-organizer-desktop/releases/latest');
                   setToastMessage(null);
-                  setShowUpdateDownloadDialog(true);
                 }
               }
             );
           }
+          
+          // Check LLM server updates if using managed-local
+          if (llmConfig.provider === 'managed-local') {
+            const updateInfo = await checkLLMServerUpdate();
+            if (updateInfo.update_available && updateInfo.latest_version) {
+              setPendingUpdateVersion(updateInfo.latest_version);
+              showToast(
+                `LLM Server update available: v${updateInfo.latest_version}`,
+                'info',
+                {
+                  label: 'Download',
+                  onClick: () => {
+                    setToastMessage(null);
+                    setShowUpdateDownloadDialog(true);
+                  }
+                }
+              );
+            }
+          }
         } catch (error) {
           // Silent fail on startup check
-          debugLogger.debug('LLM_UPDATE', 'Startup update check failed', { error });
+          debugLogger.debug('UPDATE_CHECK', 'Startup update check failed', { error });
         }
       }, 2000);
       return () => clearTimeout(timer);
     }
-  }, []); // Only run once on mount
+  }, [autoCheckUpdates, llmConfig.provider]);
 
-  // Check for saved session on mount and auto-restore
   useEffect(() => {
     debugLogger.info('APP_INIT', 'Checking for saved session on mount', {});
     const savedState = loadProcessedState();

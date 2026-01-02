@@ -837,7 +837,21 @@ export async function checkLLMServerUpdate(): Promise<LLMServerUpdateInfo> {
   try {
     return await invoke<LLMServerUpdateInfo>('check_llm_server_update');
   } catch (error: any) {
-    throw new Error(`Failed to check for updates: ${error.message || String(error)}`);
+    throw new Error(`Failed to check for LLM updates: ${error.message || String(error)}`);
+  }
+}
+
+export interface AppUpdateInfo {
+  latest_version: string | null;
+  update_available: boolean;
+  current_version: string;
+}
+
+export async function checkAppUpdate(): Promise<AppUpdateInfo> {
+  try {
+    return await invoke<AppUpdateInfo>('check_app_update');
+  } catch (error: any) {
+    throw new Error(`Failed to check for app updates: ${error.message || String(error)}`);
   }
 }
 
