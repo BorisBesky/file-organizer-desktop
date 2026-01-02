@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api';
 import { checkLLMServerUpdate, LLMServerUpdateInfo } from '../api';
 import ManagedLLMDialog from './ManagedLLMDialog';
+import { ManagedLLMConfig } from '../types';
 
 interface AboutDialogProps {
   isOpen: boolean;
@@ -9,6 +10,7 @@ interface AboutDialogProps {
   llmProvider: string;
   autoCheckUpdates: boolean;
   onToggleAutoCheckUpdates: () => void;
+  managedLLMConfig?: ManagedLLMConfig;
 }
 
 interface AppVersionInfo {
@@ -21,7 +23,8 @@ export default function AboutDialog({
   onClose, 
   llmProvider,
   autoCheckUpdates,
-  onToggleAutoCheckUpdates 
+  onToggleAutoCheckUpdates,
+  managedLLMConfig
 }: AboutDialogProps) {
   const [versionInfo, setVersionInfo] = useState<AppVersionInfo | null>(null);
   const [checkingUpdate, setCheckingUpdate] = useState(false);
@@ -184,6 +187,8 @@ export default function AboutDialog({
             handleCheckForUpdates();
           }}
           latestVersion={updateInfo?.latest_version}
+          isUpdate={updateInfo?.update_available && !!updateInfo?.current_version}
+          managedLLMConfig={managedLLMConfig}
         />
       )}
     </>

@@ -1873,6 +1873,7 @@ export default function App() {
         llmProvider={llmConfig.provider}
         autoCheckUpdates={autoCheckUpdates}
         onToggleAutoCheckUpdates={handleToggleAutoCheckUpdates}
+        managedLLMConfig={managedLLMConfig}
       />
 
       {/* Update Download Dialog from Toast */}

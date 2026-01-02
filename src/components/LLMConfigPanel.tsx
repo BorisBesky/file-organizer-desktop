@@ -496,6 +496,9 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled, pro
                     disabled={disabled}
                   />
                 </label>
+                <div className="config-hint">
+                  Maximum number of tokens the model can generate in its response
+                </div>
               </div>
               <div className="config-section">
                 <label className="config-label">
