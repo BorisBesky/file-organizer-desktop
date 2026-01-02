@@ -750,12 +750,12 @@ export default function App() {
     };
   }, []);
 
-  // Keyboard shortcut for Find & Replace (Ctrl/Cmd+F)
+  // Keyboard shortcut for Find & Replace (Ctrl/Cmd+R)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Check for Ctrl+F (Windows/Linux) or Cmd+F (macOS)
-      if ((e.ctrlKey || e.metaKey) && e.key === 'f' && rows.length > 0) {
-        e.preventDefault(); // Prevent browser's default find
+      // Check for Ctrl+R (Windows/Linux) or Cmd+R (macOS)
+      if ((e.ctrlKey || e.metaKey) && e.key === 'r' && rows.length > 0) {
+        e.preventDefault(); // Prevent browser's default reload
         setSearchReplaceExpanded(true);
         // Focus on search input after state update
         setTimeout(() => {
