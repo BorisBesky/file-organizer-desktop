@@ -750,6 +750,29 @@ export default function App() {
     };
   }, []);
 
+  // Keyboard shortcut for Find & Replace (Ctrl/Cmd+F)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Check for Ctrl+F (Windows/Linux) or Cmd+F (macOS)
+      if ((e.ctrlKey || e.metaKey) && e.key === 'f' && rows.length > 0) {
+        e.preventDefault(); // Prevent browser's default find
+        setSearchReplaceExpanded(true);
+        // Focus on search input after state update
+        setTimeout(() => {
+          const searchInput = document.getElementById('search-text');
+          if (searchInput) {
+            searchInput.focus();
+          }
+        }, 0);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [rows.length]);
+
   // Auto-check for updates on startup (if enabled)
   useEffect(() => {
     if (autoCheckUpdates) {
