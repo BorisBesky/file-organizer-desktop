@@ -661,9 +661,13 @@ export default function App() {
     const unlistenAbout = listen('show-about', () => {
       setAboutOpen(true);
     });
+    const unlistenOpenDirectory = listen('open-directory', () => {
+      pickDirectory();
+    });
     return () => {
       unlistenHelp.then(f => f());
       unlistenAbout.then(f => f());
+      unlistenOpenDirectory.then(f => f());
     };
   }, []);
 

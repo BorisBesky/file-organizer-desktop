@@ -1647,7 +1647,9 @@ fn create_menu() -> Menu {
                     .add_native_item(MenuItem::Separator)
                     .add_native_item(MenuItem::Quit),
             ))
-            .add_submenu(Submenu::new("File", Menu::new()))
+            .add_submenu(Submenu::new("File", Menu::new()
+                .add_item(CustomMenuItem::new("open_directory".to_string(), "Open Directory"))
+            ))
             .add_submenu(Submenu::new("Edit", Menu::new()
                 .add_native_item(MenuItem::Undo)
                 .add_native_item(MenuItem::Redo)
@@ -1664,6 +1666,8 @@ fn create_menu() -> Menu {
     {
         Menu::new()
             .add_submenu(Submenu::new("File", Menu::new()
+                .add_item(CustomMenuItem::new("open_directory".to_string(), "Open Directory"))
+                .add_native_item(MenuItem::Separator)
                 .add_native_item(MenuItem::Quit)
             ))
             .add_submenu(Submenu::new("Edit", Menu::new()
@@ -1686,6 +1690,9 @@ fn handle_menu_event(event: WindowMenuEvent) {
         }
         "about" => {
             let _ = event.window().emit("show-about", ());
+        }
+        "open_directory" => {
+            let _ = event.window().emit("open-directory", ());
         }
         _ => {}
     }
