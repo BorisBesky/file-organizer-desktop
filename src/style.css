@@ -2105,6 +2105,18 @@ select.config-input option {
   font-weight: 500;
   color: var(--text-primary);
   margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.search-match-count {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  padding: 2px 8px;
+  border-radius: 4px;
 }
 
 .search-replace-field input[type="text"] {

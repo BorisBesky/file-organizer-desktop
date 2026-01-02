@@ -231,6 +231,7 @@ export default function App() {
   const [searchCaseSensitive, setSearchCaseSensitive] = useState(false);
   const [searchWholeWord, setSearchWholeWord] = useState(false);
   const [searchUseRegex, setSearchUseRegex] = useState(false);
+  const [filteredRowIndices, setFilteredRowIndices] = useState<number[] | null>(null);
   
   // LLM update check state
   const [autoCheckUpdates, setAutoCheckUpdates] = useState(() => {
@@ -772,6 +773,56 @@ export default function App() {
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, [rows.length]);
+
+  // Live filter rows based on search text
+  useEffect(() => {
+    if (!searchText || !searchReplaceExpanded) {
+      setFilteredRowIndices(null);
+      return;
+    }
+
+    try {
+      const matchingIndices: number[] = [];
+      
+      rows.forEach((row, index) => {
+        const category = row.category;
+        const filename = row.name;
+        let matched = false;
+
+        const testMatch = (text: string) => {
+          if (searchUseRegex) {
+            const flags = searchCaseSensitive ? '' : 'i';
+            const regex = new RegExp(searchText, flags);
+            return regex.test(text);
+          } else if (searchWholeWord) {
+            const regex = new RegExp(
+              `\\b${searchText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`,
+              searchCaseSensitive ? '' : 'i'
+            );
+            return regex.test(text);
+          } else {
+            const searchPattern = searchCaseSensitive ? searchText : searchText.toLowerCase();
+            const textToSearch = searchCaseSensitive ? text : text.toLowerCase();
+            return textToSearch.includes(searchPattern);
+          }
+        };
+
+        // Search in both category and filename
+        if (testMatch(category) || testMatch(filename)) {
+          matched = true;
+        }
+
+        if (matched) {
+          matchingIndices.push(index);
+        }
+      });
+
+      setFilteredRowIndices(matchingIndices.length > 0 ? matchingIndices : []);
+    } catch (error) {
+      // Invalid regex or other error - show all rows
+      setFilteredRowIndices(null);
+    }
+  }, [searchText, searchCaseSensitive, searchWholeWord, searchUseRegex, rows, searchReplaceExpanded]);
 
   // Auto-check for updates on startup (if enabled)
   useEffect(() => {
@@ -1529,7 +1580,14 @@ export default function App() {
   };
 
   const getSortedRows = (): Row[] => {
-    return [...rows].sort((a, b) => {
+    let rowsToSort = [...rows];
+    
+    // Apply filter if active
+    if (filteredRowIndices !== null) {
+      rowsToSort = rowsToSort.filter((_, index) => filteredRowIndices.includes(index));
+    }
+    
+    return rowsToSort.sort((a, b) => {
       let aValue: string;
       let bValue: string;
 
@@ -1883,7 +1941,13 @@ export default function App() {
                   </button>
                   <button 
                     className="secondary" 
-                    onClick={() => setSearchReplaceExpanded(!searchReplaceExpanded)} 
+                    onClick={() => {
+                      setSearchReplaceExpanded(!searchReplaceExpanded);
+                      if (searchReplaceExpanded) {
+                        setSearchText('');
+                        setFilteredRowIndices(null);
+                      }
+                    }} 
                     disabled={rows.length === 0}
                   >
                     {searchReplaceExpanded ? 'Hide Find & Replace' : 'Find & Replace'}
@@ -1897,16 +1961,27 @@ export default function App() {
                 <div className="search-replace-form">
                   <div className="search-replace-inputs">
                     <div className="search-replace-field">
-                      <label htmlFor="search-text">Find:</label>
+                      <label htmlFor="search-text">
+                        Find:
+                        {filteredRowIndices !== null && (
+                          <span className="search-match-count">
+                            {filteredRowIndices.length} match{filteredRowIndices.length !== 1 ? 'es' : ''}
+                          </span>
+                        )}
+                      </label>
                       <input
                         id="search-text"
                         type="text"
                         value={searchText}
                         onChange={(e) => setSearchText(e.target.value)}
-                        placeholder="Search in categories"
+                        placeholder="Search in filenames and categories"
                         disabled={rows.length === 0}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter' && searchText) handleSearchReplace();
+                          if (e.key === 'Escape') {
+                            setSearchText('');
+                            setFilteredRowIndices(null);
+                          }
                         }}
                       />
                     </div>
