@@ -2075,3 +2075,117 @@ select.config-input option {
     opacity: 1;
   }
 }
+
+/* Search and Replace Form Styles (Inline) */
+.search-replace-form {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.search-replace-inputs {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.search-replace-field {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 200px;
+}
+
+.search-replace-field label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+
+.search-replace-field input[type="text"] {
+  padding: 8px 12px;
+  border: 1px solid var(--border-secondary);
+  border-radius: 6px;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-size: 14px;
+  font-family: inherit;
+  transition: all 0.2s;
+}
+
+.search-replace-field input[type="text"]:focus {
+  outline: none;
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.1);
+}
+
+.search-replace-field input[type="text"]:disabled {
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.search-replace-button {
+  padding: 8px 20px;
+  background: var(--accent-blue);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+  height: fit-content;
+}
+
+.search-replace-button:hover:not(:disabled) {
+  background: var(--accent-blue-hover);
+}
+
+.search-replace-button:active:not(:disabled) {
+  background: var(--accent-blue-active);
+}
+
+.search-replace-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.search-replace-options {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.search-replace-options label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-primary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.search-replace-options input[type="checkbox"] {
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+}
+
+.search-replace-options input[type="checkbox"]:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.search-replace-options label[title] {
+  cursor: help;
+}

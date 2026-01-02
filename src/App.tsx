@@ -224,6 +224,14 @@ export default function App() {
   const [showOptimizationResult, setShowOptimizationResult] = useState(false);
   const optimizationCancelRef = useRef(false);
   
+  // Search and replace state
+  const [searchReplaceExpanded, setSearchReplaceExpanded] = useState(false);
+  const [searchText, setSearchText] = useState('');
+  const [replaceText, setReplaceText] = useState('');
+  const [searchCaseSensitive, setSearchCaseSensitive] = useState(false);
+  const [searchWholeWord, setSearchWholeWord] = useState(false);
+  const [searchUseRegex, setSearchUseRegex] = useState(false);
+  
   // LLM update check state
   const [autoCheckUpdates, setAutoCheckUpdates] = useState(() => {
     try {
@@ -652,6 +660,77 @@ export default function App() {
     const newValue = !autoCheckUpdates;
     setAutoCheckUpdates(newValue);
     localStorage.setItem('autoCheckUpdates', JSON.stringify(newValue));
+  };
+
+  // Handle search and replace in categories
+  const handleSearchReplace = () => {
+    if (!searchText) {
+      showToast('Please enter a search term', 'error');
+      return;
+    }
+
+    let matchCount = 0;
+    
+    try {
+      const updatedRows = rows.map(row => {
+        let category = row.category;
+        let matched = false;
+
+        if (searchUseRegex) {
+          // Use regex pattern
+          try {
+            const flags = searchCaseSensitive ? 'g' : 'gi';
+            const regex = new RegExp(searchText, flags);
+            if (regex.test(category)) {
+              category = category.replace(regex, replaceText);
+              matched = true;
+            }
+          } catch (e) {
+            throw new Error(`Invalid regex pattern: ${e instanceof Error ? e.message : 'Unknown error'}`);
+          }
+        } else if (searchWholeWord) {
+          // Match whole words only
+          const regex = new RegExp(
+            `\\b${searchText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`,
+            searchCaseSensitive ? 'g' : 'gi'
+          );
+          if (regex.test(category)) {
+            category = category.replace(regex, replaceText);
+            matched = true;
+          }
+        } else {
+          // Match anywhere in the string
+          const searchPattern = searchCaseSensitive ? searchText : searchText.toLowerCase();
+          const categoryToSearch = searchCaseSensitive ? category : category.toLowerCase();
+          
+          if (categoryToSearch.includes(searchPattern)) {
+            if (searchCaseSensitive) {
+              category = category.split(searchText).join(replaceText);
+            } else {
+              // Case-insensitive replace
+              const regex = new RegExp(searchText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+              category = category.replace(regex, replaceText);
+            }
+            matched = true;
+          }
+        }
+
+        if (matched) {
+          matchCount++;
+        }
+
+        return { ...row, category };
+      });
+
+      if (matchCount > 0) {
+        setRows(updatedRows);
+        showToast(`Replaced in ${matchCount} categor${matchCount === 1 ? 'y' : 'ies'}`, 'success');
+      } else {
+        showToast('No matches found', 'info');
+      }
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'Error performing search and replace', 'error');
+    }
   };
 
   useEffect(() => {
@@ -1779,9 +1858,93 @@ export default function App() {
                   <button className="secondary" onClick={optimizeCategories} disabled={busy || useExistingCategories}>
                     Optimize Categories
                   </button>
+                  <button 
+                    className="secondary" 
+                    onClick={() => setSearchReplaceExpanded(!searchReplaceExpanded)} 
+                    disabled={rows.length === 0}
+                  >
+                    {searchReplaceExpanded ? 'Hide Find & Replace' : 'Find & Replace'}
+                  </button>
                   <button onClick={applyMoves} disabled={busy}>Approve Selected</button>
                 </div>
               </div>
+              
+              {/* Search and Replace Form */}
+              {searchReplaceExpanded && (
+                <div className="search-replace-form">
+                  <div className="search-replace-inputs">
+                    <div className="search-replace-field">
+                      <label htmlFor="search-text">Find:</label>
+                      <input
+                        id="search-text"
+                        type="text"
+                        value={searchText}
+                        onChange={(e) => setSearchText(e.target.value)}
+                        placeholder="Search in categories"
+                        disabled={rows.length === 0}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && searchText) handleSearchReplace();
+                        }}
+                      />
+                    </div>
+                    <div className="search-replace-field">
+                      <label htmlFor="replace-text">Replace:</label>
+                      <input
+                        id="replace-text"
+                        type="text"
+                        value={replaceText}
+                        onChange={(e) => setReplaceText(e.target.value)}
+                        placeholder="Replacement text"
+                        disabled={rows.length === 0}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && searchText) handleSearchReplace();
+                        }}
+                      />
+                    </div>
+                    <button 
+                      className="search-replace-button"
+                      onClick={handleSearchReplace} 
+                      disabled={!searchText || rows.length === 0}
+                      title="Replace all matches in categories"
+                    >
+                      Replace All
+                    </button>
+                  </div>
+                  <div className="search-replace-options">
+                    <label title="Match exact case">
+                      <input
+                        type="checkbox"
+                        checked={searchCaseSensitive}
+                        onChange={(e) => setSearchCaseSensitive(e.target.checked)}
+                        disabled={rows.length === 0}
+                      />
+                      Case sensitive
+                    </label>
+                    <label title="Match whole words only">
+                      <input
+                        type="checkbox"
+                        checked={searchWholeWord}
+                        onChange={(e) => setSearchWholeWord(e.target.checked)}
+                        disabled={rows.length === 0 || searchUseRegex}
+                      />
+                      Whole word
+                    </label>
+                    <label title="Use regular expression pattern">
+                      <input
+                        type="checkbox"
+                        checked={searchUseRegex}
+                        onChange={(e) => {
+                          setSearchUseRegex(e.target.checked);
+                          if (e.target.checked) setSearchWholeWord(false);
+                        }}
+                        disabled={rows.length === 0}
+                      />
+                      Regex
+                    </label>
+                  </div>
+                </div>
+              )}
+              
               <div className="scroll-x">
                 <table className="resizable-table">
                   <colgroup>
