@@ -1,9 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { invoke } from '@tauri-apps/api';
+import { checkLLMServerUpdate, LLMServerUpdateInfo } from '../api';
 
 interface AboutDialogProps {
   isOpen: boolean;
   onClose: () => void;
+  llmProvider: string;
+  autoCheckUpdates: boolean;
+  onToggleAutoCheckUpdates: () => void;
 }
 
 interface AppVersionInfo {
@@ -11,16 +15,44 @@ interface AppVersionInfo {
   build_timestamp: string;
 }
 
-export default function AboutDialog({ isOpen, onClose }: AboutDialogProps) {
+export default function AboutDialog({ 
+  isOpen, 
+  onClose, 
+  llmProvider,
+  autoCheckUpdates,
+  onToggleAutoCheckUpdates 
+}: AboutDialogProps) {
   const [versionInfo, setVersionInfo] = useState<AppVersionInfo | null>(null);
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [updateInfo, setUpdateInfo] = useState<LLMServerUpdateInfo | null>(null);
+  const [updateError, setUpdateError] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
       invoke<AppVersionInfo>('get_app_version')
         .then(setVersionInfo)
         .catch(err => console.error('Failed to fetch version:', err));
+      
+      // Reset update state when dialog opens
+      setUpdateInfo(null);
+      setUpdateError(null);
     }
   }, [isOpen]);
+
+  const handleCheckForUpdates = async () => {
+    setCheckingUpdate(true);
+    setUpdateError(null);
+    setUpdateInfo(null);
+    
+    try {
+      const info = await checkLLMServerUpdate();
+      setUpdateInfo(info);
+    } catch (error: any) {
+      setUpdateError(error.message || 'Failed to check for updates');
+    } finally {
+      setCheckingUpdate(false);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -66,8 +98,60 @@ export default function AboutDialog({ isOpen, onClose }: AboutDialogProps) {
           </div>
         </div>
 
-        <div className="modal-footer">
-          <button className="button-primary" onClick={onClose}>Close</button>
+        {/* Update Status Messages */}
+        {llmProvider === 'managed-local' && (updateInfo || updateError) && (
+          <div className="modal-body" style={{ paddingTop: 0 }}>
+            {updateInfo && (
+              <div className={`update-message ${updateInfo.update_available ? 'update-available' : 'up-to-date'}`}>
+                {updateInfo.update_available && updateInfo.latest_version ? (
+                  <>
+                    <strong>Update available!</strong>
+                    <br />
+                    Version {updateInfo.latest_version} (current: {updateInfo.current_version || 'unknown'})
+                  </>
+                ) : updateInfo.latest_version ? (
+                  <>
+                    <strong>You're up to date!</strong>
+                    <br />
+                    Version {updateInfo.current_version || updateInfo.latest_version}
+                  </>
+                ) : (
+                  'Unable to determine update status'
+                )}
+              </div>
+            )}
+            
+            {updateError && (
+              <div className="update-message error">
+                {updateError}
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="modal-footer about-footer-with-checkbox">
+          {llmProvider === 'managed-local' && (
+            <label className="checkbox-label" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <input
+                type="checkbox"
+                checked={autoCheckUpdates}
+                onChange={onToggleAutoCheckUpdates}
+              />
+              <span>Auto-check for updates on startup</span>
+            </label>
+          )}
+          <div className="footer-buttons">
+            {llmProvider === 'managed-local' && (
+              <button 
+                className="button-secondary" 
+                onClick={handleCheckForUpdates}
+                disabled={checkingUpdate}
+              >
+                {checkingUpdate ? 'Checking...' : 'Check for Updates'}
+              </button>
+            )}
+            <button className="button-primary" onClick={onClose}>Close</button>
+          </div>
         </div>
       </div>
     </div>

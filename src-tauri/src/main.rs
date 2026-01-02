@@ -1405,9 +1405,6 @@ fn create_menu() -> Menu {
                 Menu::new()
                     .add_item(CustomMenuItem::new("about".to_string(), "About File Organizer"))
                     .add_native_item(MenuItem::Separator)
-                    .add_item(CustomMenuItem::new("check_llm_update".to_string(), "Check for LLM Server Updates"))
-                    .add_item(CustomMenuItem::new("toggle_auto_check_updates".to_string(), "Auto-check Updates on Startup"))
-                    .add_native_item(MenuItem::Separator)
                     .add_native_item(MenuItem::Hide)
                     .add_native_item(MenuItem::HideOthers)
                     .add_native_item(MenuItem::ShowAll)
@@ -1429,11 +1426,6 @@ fn create_menu() -> Menu {
 
     #[cfg(not(target_os = "macos"))]
     {
-        let help_menu_extended = help_menu
-            .add_native_item(MenuItem::Separator)
-            .add_item(CustomMenuItem::new("check_llm_update".to_string(), "Check for LLM Server Updates"))
-            .add_item(CustomMenuItem::new("toggle_auto_check_updates".to_string(), "Auto-check Updates on Startup"));
-            
         Menu::new()
             .add_submenu(Submenu::new("File", Menu::new()
                 .add_native_item(MenuItem::Quit)
@@ -1447,7 +1439,7 @@ fn create_menu() -> Menu {
                 .add_native_item(MenuItem::Paste)
                 .add_native_item(MenuItem::SelectAll)
             ))
-            .add_submenu(Submenu::new("Help", help_menu_extended))
+            .add_submenu(Submenu::new("Help", help_menu))
     }
 }
 
@@ -1458,12 +1450,6 @@ fn handle_menu_event(event: WindowMenuEvent) {
         }
         "about" => {
             let _ = event.window().emit("show-about", ());
-        }
-        "check_llm_update" => {
-            let _ = event.window().emit("check-llm-update", ());
-        }
-        "toggle_auto_check_updates" => {
-            let _ = event.window().emit("toggle-auto-check-updates", ());
         }
         _ => {}
     }

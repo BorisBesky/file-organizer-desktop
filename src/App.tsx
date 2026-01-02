@@ -644,46 +644,11 @@ export default function App() {
     }, 4000);
   };
 
-  // Handle LLM update check
-  const handleCheckLLMUpdate = async () => {
-    showToast('Checking for LLM server updates...', 'info');
-    try {
-      const updateInfo = await checkLLMServerUpdate();
-      
-      if (updateInfo.update_available && updateInfo.latest_version) {
-        showToast(
-          `Update available: v${updateInfo.latest_version} (current: v${updateInfo.current_version || 'unknown'})`,
-          'success'
-        );
-      } else if (updateInfo.latest_version) {
-        showToast(
-          `You have the latest version (v${updateInfo.current_version || updateInfo.latest_version})`,
-          'success'
-        );
-      } else {
-        showToast('Unable to check for updates', 'error');
-      }
-      
-      debugLogger.debug('LLM_UPDATE', 'Update check completed', { 
-        latestVersion: updateInfo.latest_version,
-        updateAvailable: updateInfo.update_available,
-        currentVersion: updateInfo.current_version
-      });
-    } catch (error: any) {
-      debugLogger.error('LLM_UPDATE', 'Failed to check for updates', { error });
-      showToast(`Failed to check for updates: ${error.message || 'Unknown error'}`, 'error');
-    }
-  };
-
   // Handle toggle auto-check updates
   const handleToggleAutoCheckUpdates = () => {
     const newValue = !autoCheckUpdates;
     setAutoCheckUpdates(newValue);
     localStorage.setItem('autoCheckLLMUpdates', JSON.stringify(newValue));
-    showToast(
-      `Auto-check updates on startup ${newValue ? 'enabled' : 'disabled'}`,
-      'success'
-    );
   };
 
   useEffect(() => {
@@ -693,17 +658,9 @@ export default function App() {
     const unlistenAbout = listen('show-about', () => {
       setAboutOpen(true);
     });
-    const unlistenCheckUpdate = listen('check-llm-update', () => {
-      handleCheckLLMUpdate();
-    });
-    const unlistenToggleAutoCheck = listen('toggle-auto-check-updates', () => {
-      handleToggleAutoCheckUpdates();
-    });
     return () => {
       unlistenHelp.then(f => f());
       unlistenAbout.then(f => f());
-      unlistenCheckUpdate.then(f => f());
-      unlistenToggleAutoCheck.then(f => f());
     };
   }, []);
 
@@ -711,8 +668,19 @@ export default function App() {
   useEffect(() => {
     if (autoCheckUpdates && llmConfig.provider === 'managed-local') {
       // Small delay to let the app settle
-      const timer = setTimeout(() => {
-        handleCheckLLMUpdate();
+      const timer = setTimeout(async () => {
+        try {
+          const updateInfo = await checkLLMServerUpdate();
+          if (updateInfo.update_available && updateInfo.latest_version) {
+            showToast(
+              `LLM Server update available: v${updateInfo.latest_version}`,
+              'info'
+            );
+          }
+        } catch (error) {
+          // Silent fail on startup check
+          debugLogger.debug('LLM_UPDATE', 'Startup update check failed', { error });
+        }
       }, 2000);
       return () => clearTimeout(timer);
     }
@@ -1889,7 +1857,13 @@ export default function App() {
 
       {/* Help and About Dialogs */}
       <HelpDialog isOpen={helpOpen} onClose={() => setHelpOpen(false)} />
-      <AboutDialog isOpen={aboutOpen} onClose={() => setAboutOpen(false)} />
+      <AboutDialog 
+        isOpen={aboutOpen} 
+        onClose={() => setAboutOpen(false)} 
+        llmProvider={llmConfig.provider}
+        autoCheckUpdates={autoCheckUpdates}
+        onToggleAutoCheckUpdates={handleToggleAutoCheckUpdates}
+      />
 
       {/* Snackbar for undo actions */}
       {snackbarVisible && (
