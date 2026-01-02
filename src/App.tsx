@@ -3,7 +3,7 @@ import { classifyViaLLM, optimizeCategoriesViaLLM, LLMConfig, DEFAULT_CONFIGS, L
 import { invoke } from '@tauri-apps/api/tauri';
 import { listen } from '@tauri-apps/api/event';
 import { ScanState, ManagedLLMConfig, SavedProcessedState } from './types';
-import { LLMConfigPanel, HelpDialog, AboutDialog } from './components';
+import { LLMConfigPanel, HelpDialog, AboutDialog, ManagedLLMDialog } from './components';
 import { debugLogger } from './debug-logger';
 
 function sanitizeFilename(name: string) {
@@ -232,8 +232,10 @@ export default function App() {
       return true;
     }
   });
-  const [toastMessage, setToastMessage] = useState<{ message: string; type: 'info' | 'success' | 'error' } | null>(null);
+  const [toastMessage, setToastMessage] = useState<{ message: string; type: 'info' | 'success' | 'error'; action?: { label: string; onClick: () => void } } | null>(null);
   const toastTimeoutRef = useRef<number | null>(null);
+  const [pendingUpdateVersion, setPendingUpdateVersion] = useState<string | null>(null);
+  const [showUpdateDownloadDialog, setShowUpdateDownloadDialog] = useState(false);
   
   // Sorting state
   const [sortBy, setSortBy] = useState<SortField>('source');
@@ -634,14 +636,14 @@ export default function App() {
   // Removed the directory-selected event listener since we now use direct invoke
 
   // Show toast notification
-  const showToast = (message: string, type: 'info' | 'success' | 'error' = 'info') => {
-    setToastMessage({ message, type });
+  const showToast = (message: string, type: 'info' | 'success' | 'error' = 'info', action?: { label: string; onClick: () => void }) => {
+    setToastMessage({ message, type, action });
     if (toastTimeoutRef.current) {
       window.clearTimeout(toastTimeoutRef.current);
     }
     toastTimeoutRef.current = window.setTimeout(() => {
       setToastMessage(null);
-    }, 4000);
+    }, action ? 8000 : 4000); // Longer timeout if there's an action button
   };
 
   // Handle toggle auto-check updates
@@ -672,9 +674,17 @@ export default function App() {
         try {
           const updateInfo = await checkLLMServerUpdate();
           if (updateInfo.update_available && updateInfo.latest_version) {
+            setPendingUpdateVersion(updateInfo.latest_version);
             showToast(
               `LLM Server update available: v${updateInfo.latest_version}`,
-              'info'
+              'info',
+              {
+                label: 'Download',
+                onClick: () => {
+                  setToastMessage(null);
+                  setShowUpdateDownloadDialog(true);
+                }
+              }
             );
           }
         } catch (error) {
@@ -1865,6 +1875,18 @@ export default function App() {
         onToggleAutoCheckUpdates={handleToggleAutoCheckUpdates}
       />
 
+      {/* Update Download Dialog from Toast */}
+      <ManagedLLMDialog
+        isOpen={showUpdateDownloadDialog}
+        onClose={() => setShowUpdateDownloadDialog(false)}
+        onDownloadComplete={() => {
+          setShowUpdateDownloadDialog(false);
+          setPendingUpdateVersion(null);
+          showToast('LLM Server update installed successfully', 'success');
+        }}
+        latestVersion={pendingUpdateVersion || undefined}
+      />
+
       {/* Snackbar for undo actions */}
       {snackbarVisible && (
         <div
@@ -1939,6 +1961,23 @@ export default function App() {
           }}
         >
           <span style={{ flex: 1 }}>{toastMessage.message}</span>
+          {toastMessage.action && (
+            <button
+              onClick={toastMessage.action.onClick}
+              style={{
+                background: 'rgba(255, 255, 255, 0.2)',
+                color: '#fff',
+                border: '1px solid rgba(255, 255, 255, 0.5)',
+                cursor: 'pointer',
+                fontSize: '0.9rem',
+                padding: '6px 12px',
+                borderRadius: '4px',
+                fontWeight: 600,
+              }}
+            >
+              {toastMessage.action.label}
+            </button>
+          )}
           <button
             onClick={() => setToastMessage(null)}
             aria-label="Close toast"
