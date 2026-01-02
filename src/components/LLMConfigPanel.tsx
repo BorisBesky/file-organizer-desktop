@@ -157,7 +157,35 @@ export default function LLMConfigPanel({ config, onChange, onTest, disabled, pro
     setIsStarting(true);
     try {
       await startManagedLLMServer(currentManagedConfig);
+      
+      // Poll for server status until it's actually running
+      // Maximum 30 seconds (60 attempts * 500ms)
+      let attempts = 0;
+      const maxAttempts = 60;
+      
+      while (attempts < maxAttempts) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+        const status = await getManagedLLMServerStatus();
+        
+        if (status.status === 'running') {
+          // Server has successfully started
+          await loadManagedLLMStatus();
+          setIsStarting(false);
+          return;
+        } else if (status.status === 'error') {
+          // Server failed to start
+          await loadManagedLLMStatus();
+          setTestMessage('Server failed to start');
+          setIsStarting(false);
+          return;
+        }
+        
+        attempts++;
+      }
+      
+      // Timeout - server didn't start in time
       await loadManagedLLMStatus();
+      setTestMessage('Server start timeout - check server logs');
     } catch (error: any) {
       debugLogger.error('MANAGED_LLM', 'Failed to start server', { error });
       setTestMessage(`Failed to start server: ${error.message}`);
