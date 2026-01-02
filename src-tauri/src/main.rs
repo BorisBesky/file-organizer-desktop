@@ -1501,7 +1501,7 @@ async fn check_llm_server_update(
                 _ => false,
             }
         }
-        (None, Some(_)) => true, // No current version but latest exists
+        (None, Some(_)) => false, // No current version - not an update, just available for download
         _ => false, // No latest version or both None
     };
     
