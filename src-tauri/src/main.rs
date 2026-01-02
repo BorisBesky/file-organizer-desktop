@@ -1449,18 +1449,45 @@ async fn check_llm_server_latest_version() -> Result<Option<String>, String> {
         .await
         .map_err(|e| format!("Failed to parse releases JSON: {}", e))?;
     
-    // Find the latest release with tag starting with "llm-v"
+    // Find the latest non-draft, non-prerelease with tag starting with "llm-v"
+    let mut latest_version: Option<String> = None;
+    
     for release in releases {
+        // Skip drafts and prereleases
+        let is_draft = release["draft"].as_bool().unwrap_or(false);
+        let is_prerelease = release["prerelease"].as_bool().unwrap_or(false);
+        
+        if let Some(tag_name) = release["tag_name"].as_str() {
+            eprintln!("Found release: {} (draft: {}, prerelease: {})", tag_name, is_draft, is_prerelease);
+        }
+        
+        if is_draft || is_prerelease {
+            continue;
+        }
+        
         if let Some(tag_name) = release["tag_name"].as_str() {
             if tag_name.starts_with("llm-v") {
                 // Extract version from tag (e.g., "llm-v1.0.0" -> "1.0.0")
-                let version = tag_name.strip_prefix("llm-v").unwrap_or(tag_name);
-                return Ok(Some(version.to_string()));
+                let version = tag_name.strip_prefix("llm-v").unwrap_or(tag_name).to_string();
+                eprintln!("Found LLM version: {}", version);
+                
+                // If we haven't found any version yet, or this version is newer
+                if latest_version.is_none() {
+                    eprintln!("Setting as first latest: {}", version);
+                    latest_version = Some(version);
+                } else if let Some(ref current_latest) = latest_version {
+                    eprintln!("Comparing {} with current latest {}", version, current_latest);
+                    if let Some(true) = compare_versions(&version, current_latest) {
+                        eprintln!("Updating latest to: {}", version);
+                        latest_version = Some(version);
+                    }
+                }
             }
         }
     }
     
-    Ok(None)
+    eprintln!("Final latest version: {:?}", latest_version);
+    Ok(latest_version)
 }
 
 // Response type for update check
