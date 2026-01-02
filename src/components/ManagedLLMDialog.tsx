@@ -1,17 +1,28 @@
 import React, { useState } from 'react';
-import { downloadManagedLLMServer } from '../api';
+import { downloadManagedLLMServer, updateManagedLLMServer } from '../api';
+import { ManagedLLMConfig } from '../types';
 
 interface ManagedLLMDialogProps {
   isOpen: boolean;
   onClose: () => void;
   onDownloadComplete: () => void;
   latestVersion?: string;
+  isUpdate?: boolean;
+  managedLLMConfig?: ManagedLLMConfig;
 }
 
-export default function ManagedLLMDialog({ isOpen, onClose, onDownloadComplete, latestVersion }: ManagedLLMDialogProps) {
+export default function ManagedLLMDialog({ 
+  isOpen, 
+  onClose, 
+  onDownloadComplete, 
+  latestVersion,
+  isUpdate = false,
+  managedLLMConfig
+}: ManagedLLMDialogProps) {
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState<string>('');
   
   // Always use the latest version, fallback to '0.1.0' if not available
   const version = latestVersion || '0.1.0';
@@ -22,36 +33,66 @@ export default function ManagedLLMDialog({ isOpen, onClose, onDownloadComplete, 
     setIsDownloading(true);
     setError(null);
     setDownloadProgress(0);
+    setStatusMessage('');
 
     try {
-      // Simulate progress updates (in a real implementation, this would come from events)
-      const progressInterval = setInterval(() => {
-        setDownloadProgress(prev => {
-          if (prev >= 90) {
-            clearInterval(progressInterval);
-            return 90;
-          }
-          return prev + 10;
+      if (isUpdate && managedLLMConfig) {
+        // Use update function which handles backup/restore
+        setStatusMessage('Stopping server and creating backup...');
+        setDownloadProgress(10);
+        
+        // Small delay to show status
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        setStatusMessage('Downloading new version...');
+        setDownloadProgress(30);
+        
+        await updateManagedLLMServer(version, managedLLMConfig, (percent) => {
+          // Map progress to 30-90% range
+          setDownloadProgress(30 + (percent * 0.6));
         });
-      }, 200);
+        
+        setStatusMessage('Verifying installation...');
+        setDownloadProgress(95);
+        await new Promise(resolve => setTimeout(resolve, 300));
+      } else {
+        // Fresh download
+        setStatusMessage('Downloading server...');
+        
+        // Simulate progress updates
+        const progressInterval = setInterval(() => {
+          setDownloadProgress(prev => {
+            if (prev >= 90) {
+              clearInterval(progressInterval);
+              return 90;
+            }
+            return prev + 10;
+          });
+        }, 200);
+        
+        await downloadManagedLLMServer(version, (percent) => {
+          clearInterval(progressInterval);
+          setDownloadProgress(percent);
+        });
+        
+        clearInterval(progressInterval);
+      }
 
-      await downloadManagedLLMServer(version, (percent) => {
-        setDownloadProgress(percent);
-      });
-
-      clearInterval(progressInterval);
       setDownloadProgress(100);
+      setStatusMessage(isUpdate ? 'Update completed successfully!' : 'Download completed successfully!');
       
       setTimeout(() => {
         onDownloadComplete();
         onClose();
         setIsDownloading(false);
         setDownloadProgress(0);
+        setStatusMessage('');
       }, 500);
     } catch (err: any) {
-      setError(err.message || 'Download failed');
+      setError(err.message || (isUpdate ? 'Update failed' : 'Download failed'));
       setIsDownloading(false);
       setDownloadProgress(0);
+      setStatusMessage('');
     }
   };
 
@@ -65,13 +106,21 @@ export default function ManagedLLMDialog({ isOpen, onClose, onDownloadComplete, 
     <div className="modal-overlay">
       <div className="modal-dialog managed-llm-dialog">
         <div className="modal-header">
-          <h3>Download Local LLM Server</h3>
+          <h3>{isUpdate ? 'Update Local LLM Server' : 'Download Local LLM Server'}</h3>
         </div>
         
         <div className="modal-content">
           <p>
-            The Local LLM Server component is not installed. This will download and install 
-            the appropriate server binary for your platform from GitHub releases.
+            {isUpdate 
+              ? `A new version of the Local LLM Server is available. The update process will:
+                 • Stop the server if running
+                 • Backup the existing installation
+                 • Download and install the new version
+                 • Restart the server if it was running
+                 • Roll back to the backup if the update fails`
+              : `The Local LLM Server component is not installed. This will download and install 
+                 the appropriate server binary for your platform from GitHub releases.`
+            }
           </p>
           
           <div className="download-info">
@@ -89,7 +138,7 @@ export default function ManagedLLMDialog({ isOpen, onClose, onDownloadComplete, 
           {isDownloading && (
             <div className="download-progress">
               <div className="progress-label">
-                Downloading server binary... {downloadProgress}%
+                {statusMessage || (isUpdate ? 'Updating server...' : 'Downloading server binary...')} {downloadProgress}%
               </div>
               <div className="progress-bar-container">
                 <div 
@@ -102,7 +151,7 @@ export default function ManagedLLMDialog({ isOpen, onClose, onDownloadComplete, 
 
           {error && (
             <div className="error-message">
-              <strong>Download failed:</strong> {error}
+              <strong>{isUpdate ? 'Update failed:' : 'Download failed:'}</strong> {error}
             </div>
           )}
         </div>
@@ -120,7 +169,7 @@ export default function ManagedLLMDialog({ isOpen, onClose, onDownloadComplete, 
             onClick={handleDownload}
             disabled={isDownloading}
           >
-            {isDownloading ? 'Downloading...' : 'Download & Install'}
+            {isDownloading ? (isUpdate ? 'Updating...' : 'Downloading...') : (isUpdate ? 'Update Server' : 'Download & Install')}
           </button>
         </div>
       </div>

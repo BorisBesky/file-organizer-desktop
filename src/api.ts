@@ -840,3 +840,28 @@ export async function checkLLMServerUpdate(): Promise<LLMServerUpdateInfo> {
     throw new Error(`Failed to check for updates: ${error.message || String(error)}`);
   }
 }
+
+export async function updateManagedLLMServer(
+  version: string,
+  config: ManagedLLMConfig,
+  onProgress?: (percent: number) => void
+): Promise<string> {
+  try {
+    // Call the update command which handles:
+    // 1. Stop server if running
+    // 2. Backup existing server
+    // 3. Download and extract new version
+    // 4. Attempt to start server
+    // 5. If successful, delete backup; if failed, restore from backup
+    const result = await invoke<string>('update_llm_server', { version, config });
+    
+    // Ensure progress reaches 100% when update completes
+    if (onProgress) {
+      onProgress(100);
+    }
+    
+    return result;
+  } catch (error: any) {
+    throw new Error(`Failed to update server: ${error.message || String(error)}`);
+  }
+}

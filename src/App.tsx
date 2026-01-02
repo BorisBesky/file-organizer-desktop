@@ -1885,6 +1885,8 @@ export default function App() {
           showToast('LLM Server update installed successfully', 'success');
         }}
         latestVersion={pendingUpdateVersion || undefined}
+        isUpdate={true}
+        managedLLMConfig={managedLLMConfig}
       />
 
       {/* Snackbar for undo actions */}

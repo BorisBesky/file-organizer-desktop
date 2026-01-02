@@ -1023,6 +1023,161 @@ async fn download_llm_server(app: AppHandle, version: String) -> Result<String, 
 }
 
 #[command]
+async fn update_llm_server(
+    app: AppHandle,
+    version: String,
+    config: ManagedLLMConfig,
+    state: State<'_, ManagedLLMState>
+) -> Result<String, String> {
+    eprintln!("Starting LLM server update to version: {}", version);
+    
+    let app_data_dir = app.path_resolver()
+        .app_data_dir()
+        .ok_or("Could not get app data directory")?;
+    
+    let server_dir = app_data_dir.join("llm-server");
+    
+    // Determine the server directory based on platform
+    let extract_dir = if cfg!(target_os = "windows") {
+        "llama_server"
+    } else if cfg!(target_os = "macos") {
+        "mlx_server"
+    } else {
+        "llama_server"
+    };
+    
+    let server_path = server_dir.join(extract_dir);
+    let backup_path = server_dir.join(format!("{}_backup", extract_dir));
+    
+    // Step 1: Stop the server if running
+    eprintln!("Stopping server...");
+    let was_running = {
+        let server_state = state.lock().unwrap();
+        server_state.is_some()
+    };
+    
+    if was_running {
+        if let Err(e) = stop_llm_server(app.clone(), state.clone()).await {
+            eprintln!("Warning: Failed to stop server: {}", e);
+            // Continue anyway
+        }
+        // Wait for server to fully stop
+        std::thread::sleep(std::time::Duration::from_secs(2));
+    }
+    
+    // Step 2: Backup existing server directory
+    if server_path.exists() {
+        eprintln!("Backing up existing server...");
+        
+        // Remove old backup if it exists
+        if backup_path.exists() {
+            fs::remove_dir_all(&backup_path)
+                .map_err(|e| format!("Failed to remove old backup: {}", e))?;
+        }
+        
+        // Create backup
+        fs::rename(&server_path, &backup_path)
+            .map_err(|e| format!("Failed to create backup: {}", e))?;
+        
+        eprintln!("Backup created at: {}", backup_path.to_string_lossy());
+    } else {
+        eprintln!("No existing server found, performing fresh installation");
+    }
+    
+    // Step 3: Download and extract new version
+    eprintln!("Downloading new server version...");
+    let download_result = download_llm_server(app.clone(), version.clone()).await;
+    
+    match download_result {
+        Ok(_) => {
+            eprintln!("Download successful, verifying installation...");
+            
+            // Step 4: Try to start the server with new version
+            if was_running {
+                eprintln!("Attempting to start updated server...");
+                let start_result = start_llm_server(app.clone(), config.clone(), state.clone()).await;
+                
+                match start_result {
+                    Ok(_) => {
+                        // Step 5a: Success - remove backup
+                        eprintln!("Server started successfully, removing backup...");
+                        if backup_path.exists() {
+                            if let Err(e) = fs::remove_dir_all(&backup_path) {
+                                eprintln!("Warning: Failed to remove backup: {}", e);
+                                // Not a critical error, update was successful
+                            }
+                        }
+                        Ok(format!("Successfully updated to version {}", version))
+                    }
+                    Err(e) => {
+                        // Step 5b: Failed to start - restore backup
+                        eprintln!("Failed to start new server: {}, restoring backup...", e);
+                        
+                        // Remove the failed new installation
+                        if server_path.exists() {
+                            if let Err(remove_err) = fs::remove_dir_all(&server_path) {
+                                eprintln!("Warning: Failed to remove failed installation: {}", remove_err);
+                            }
+                        }
+                        
+                        // Restore from backup
+                        if backup_path.exists() {
+                            fs::rename(&backup_path, &server_path)
+                                .map_err(|e| format!("Failed to restore backup: {}", e))?;
+                            
+                            eprintln!("Backup restored, attempting to start old server...");
+                            // Try to restart the old server
+                            if let Err(restart_err) = start_llm_server(app, config, state).await {
+                                eprintln!("Warning: Failed to restart old server: {}", restart_err);
+                            }
+                        }
+                        
+                        Err(format!("Update failed: {}. Restored previous version.", e))
+                    }
+                }
+            } else {
+                // Server wasn't running, just remove backup
+                eprintln!("Update completed (server was not running)");
+                if backup_path.exists() {
+                    if let Err(e) = fs::remove_dir_all(&backup_path) {
+                        eprintln!("Warning: Failed to remove backup: {}", e);
+                    }
+                }
+                Ok(format!("Successfully updated to version {}", version))
+            }
+        }
+        Err(e) => {
+            // Step 5c: Download failed - restore backup
+            eprintln!("Download failed: {}, restoring backup...", e);
+            
+            if backup_path.exists() {
+                // Remove any partial download
+                if server_path.exists() {
+                    if let Err(remove_err) = fs::remove_dir_all(&server_path) {
+                        eprintln!("Warning: Failed to remove partial download: {}", remove_err);
+                    }
+                }
+                
+                // Restore backup
+                fs::rename(&backup_path, &server_path)
+                    .map_err(|e| format!("Failed to restore backup: {}", e))?;
+                
+                eprintln!("Backup restored");
+                
+                // Try to restart the old server if it was running
+                if was_running {
+                    if let Err(restart_err) = start_llm_server(app, config, state).await {
+                        eprintln!("Warning: Failed to restart old server: {}", restart_err);
+                    }
+                }
+            }
+            
+            Err(format!("Update failed: {}. Previous version restored.", e))
+        }
+    }
+}
+
+#[command]
 async fn start_llm_server(
     app: AppHandle,
     config: ManagedLLMConfig,
@@ -1549,6 +1704,7 @@ fn main() {
             get_app_version,
             get_llm_server_status,
             download_llm_server,
+            update_llm_server,
             start_llm_server,
             stop_llm_server,
             get_llm_server_info,
