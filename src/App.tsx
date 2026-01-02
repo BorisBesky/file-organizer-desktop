@@ -137,7 +137,7 @@ export default function App() {
       model: 'local-model',
       maxTokens: 4096,
       maxTextLength: 4096,
-      systemMessage: 'Return only valid JSON (no markdown), with keys: category_path, suggested_filename, confidence (0-1).',
+      systemMessage: 'Return only valid JSON (no markdown), with keys: category_path, suggested_filename.',
     };
   };
 
@@ -582,7 +582,7 @@ export default function App() {
       const standardDefaults = {
         maxTokens: 4096,
         maxTextLength: 4096,
-        systemMessage: 'Return only valid JSON (no markdown), with keys: category_path, suggested_filename, confidence (0-1).',
+        systemMessage: 'Return only valid JSON (no markdown), with keys: category_path, suggested_filename.',
         customHeaders: undefined,
         supportsVision: false,
         apiKey: undefined,
@@ -984,7 +984,6 @@ export default function App() {
         info.llm = {
           category_path: extCategory,
           suggested_filename: originalName,
-          confidence: 0.5,
           raw: { method: 'extension-based' }
         };
         
@@ -1009,7 +1008,7 @@ export default function App() {
       
       // For readable files (text/images), use LLM classification
       setEvents((prev: string[]) => [`Classifying ${f}`, ...prev]);
-      let result: { category_path: string; suggested_filename: string; confidence: number; raw?: any };
+      let result: { category_path: string; suggested_filename: string; raw?: any };
       
       // Build categories hint - use existing categories if enabled, otherwise use hints from already processed files
       const existingCategoriesList = existingCategoriesRef.current;
@@ -1048,7 +1047,7 @@ export default function App() {
           }
         }
       } catch (e: any) {
-        result = { category_path: 'uncategorized', suggested_filename: originalName, confidence: 0, raw: { error: e?.message || String(e) } };
+        result = { category_path: 'uncategorized', suggested_filename: originalName, raw: { error: e?.message || String(e) } };
       }
       
       // Use suggested_filename directly - it already has the extension removed by the LLM

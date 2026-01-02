@@ -72,8 +72,7 @@ You are a file organizer. Analyze the text content and provide classification an
   **Output Format**: Return ONLY valid JSON with these exact keys:
   {
     "category_path": "Category/Subcategory",
-    "suggested_filename": "descriptive_name_here",
-    "confidence": 0.85
+    "suggested_filename": "descriptive_name_here"
   }
 
   Original filename: $FILE_NAME
@@ -85,7 +84,7 @@ EOF
 # Build JSON request body
 JSON_BODY=$(jq -n \
     --arg model "$MODEL" \
-    --arg system_msg "Return only valid JSON (no markdown), with keys: category_path, suggested_filename, confidence (0-1)." \
+    --arg system_msg "Return only valid JSON (no markdown), with keys: category_path, suggested_filename." \
     --arg prompt "$PROMPT" \
     '{
         "model": $model,

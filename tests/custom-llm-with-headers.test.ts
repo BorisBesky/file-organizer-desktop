@@ -191,7 +191,7 @@ async function testCustomLLMConnection(): Promise<void> {
     model: TEST_CONFIG.MODEL,
     apiKey: TEST_CONFIG.API_KEY,
     maxTokens: 4096,
-    systemMessage: 'Return only valid JSON (no markdown), with keys: category_path, suggested_filename, confidence (0-1).',
+    systemMessage: 'Return only valid JSON (no markdown), with keys: category_path, suggested_filename.',
   };
 
   console.log('Testing configuration:');
@@ -216,7 +216,7 @@ async function testCustomLLMConnection(): Promise<void> {
     console.log('Response:', JSON.stringify(result, null, 2));
 
     // Validate response structure
-    if (!result.category_path || !result.suggested_filename || typeof result.confidence !== 'number') {
+    if (!result.category_path || !result.suggested_filename) {
       throw new Error('Invalid response structure');
     }
 

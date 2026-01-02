@@ -18,7 +18,6 @@ export type Row = {
 export interface ClassifyResult {
   category_path: string;
   suggested_filename: string;
-  confidence: number;
   raw?: any;
 }
 

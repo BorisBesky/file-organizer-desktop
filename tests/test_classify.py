@@ -89,8 +89,7 @@ def build_classification_prompt(original_name: str, text_content: str | None,
   **Output Format**: Return ONLY valid JSON with these exact keys:
   {{
     "category_path": "Category/Subcategory",
-    "suggested_filename": "descriptive_name_here",
-    "confidence": 0.85
+    "suggested_filename": "descriptive_name_here"
   }}
 
   Original filename: {original_name}"""
@@ -127,7 +126,7 @@ def classify_file(file_path: Path, server_url: str = DEFAULT_SERVER_URL,
     )
     
     # Build request body
-    system_message = "Return only valid JSON (no markdown), with keys: category_path, suggested_filename, confidence (0-1)."
+    system_message = "Return only valid JSON (no markdown), with keys: category_path, suggested_filename."
     
     if is_image and supports_vision:
         # OpenAI-compatible vision format

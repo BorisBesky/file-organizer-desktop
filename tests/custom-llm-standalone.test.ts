@@ -171,7 +171,7 @@ async function testActualAPICall() {
       body: JSON.stringify({
         model: TEST_CONFIG.MODEL,
         messages: [
-          { role: 'system', content: 'Return only valid JSON with keys: category_path, suggested_filename, confidence (0-1).' },
+          { role: 'system', content: 'Return only valid JSON with keys: category_path, suggested_filename.' },
           { role: 'user', content: 'Classify this: Invoice from Acme Corp dated 2024-03-15' },
         ],
         temperature: 0.2,
@@ -225,7 +225,7 @@ async function testActualAPICall() {
       body: JSON.stringify({
         model: TEST_CONFIG.MODEL,
         messages: [
-          { role: 'system', content: 'Return only valid JSON with keys: category_path, suggested_filename, confidence (0-1).' },
+          { role: 'system', content: 'Return only valid JSON with keys: category_path, suggested_filename.' },
           { role: 'user', content: 'Classify this: Medical bill from Dr. Smith' },
         ],
         temperature: 0.2,

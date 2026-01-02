@@ -409,7 +409,7 @@ export async function classifyViaLLM(opts: {
   originalName: string,
   categoriesHint: string[],
   fileContent?: FileContent,
-}): Promise<{ category_path: string; suggested_filename: string; confidence: number; raw?: any }>{
+}): Promise<{ category_path: string; suggested_filename: string; raw?: any }>{
   const { config, text, originalName, categoriesHint, fileContent } = opts;
   
   // Check if we have an image but the model doesn't support vision
@@ -418,7 +418,6 @@ export async function classifyViaLLM(opts: {
     return {
       category_path: 'uncategorized/images',
       suggested_filename: originalName.replace(/\.[^/.]+$/, ''),
-      confidence: 0,
       raw: { skipped: 'Model does not support vision' },
     };
   }
@@ -476,8 +475,7 @@ export async function classifyViaLLM(opts: {
   **Output Format**: Return ONLY valid JSON with these exact keys:
   {
     "category_path": "one/of/the/existing/categories",
-    "suggested_filename": "descriptive_name_here",
-    "confidence": 0.85
+    "suggested_filename": "descriptive_name_here"
   }
 
   Original filename: ${originalName}`;
@@ -517,8 +515,7 @@ export async function classifyViaLLM(opts: {
   **Output Format**: Return ONLY valid JSON with these exact keys:
   {
     "category_path": "Category/Subcategory",
-    "suggested_filename": "descriptive_name_here",
-    "confidence": 0.85
+    "suggested_filename": "descriptive_name_here"
   }
 
   Original filename: ${originalName}`;
@@ -532,7 +529,7 @@ export async function classifyViaLLM(opts: {
     }
   }
 
-  const systemMessage = config.systemMessage || 'Return only valid JSON (no markdown), with keys: category_path, suggested_filename, confidence (0-1).';
+  const systemMessage = config.systemMessage || 'Return only valid JSON (no markdown), with keys: category_path, suggested_filename.';
   
   const endpoint = getCompletionEndpoint(config);
   const headers = buildHeaders(config);
@@ -613,7 +610,6 @@ export async function classifyViaLLM(opts: {
   return safeParseJson(content, () => ({
     category_path: 'uncategorized',
     suggested_filename: originalName.replace(/\.[^/.]+$/, ''),
-    confidence: 0,
   }));
 }
 

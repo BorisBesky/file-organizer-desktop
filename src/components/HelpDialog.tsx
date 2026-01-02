@@ -86,7 +86,6 @@ export default function HelpDialog({ isOpen, onClose }: HelpDialogProps) {
             <ol>
               <li>Classifies each file into a category path (e.g., "finance/taxes", "medical/bills").</li>
               <li>Suggests a descriptive filename based on content, including dates and provider names when detected.</li>
-              <li>Assigns a confidence score (0-1) for each classification.</li>
             </ol>
             <p>Files are only moved when you explicitly approve them. Original files are preserved until you click "Approve Selected".</p>
           </section>
