@@ -226,6 +226,7 @@ export default function App() {
   
   // Search and replace state
   const [searchReplaceExpanded, setSearchReplaceExpanded] = useState(false);
+  const [showReplaceField, setShowReplaceField] = useState(false);
   const [searchText, setSearchText] = useState('');
   const [replaceText, setReplaceText] = useState('');
   const [searchCaseSensitive, setSearchCaseSensitive] = useState(false);
@@ -751,11 +752,11 @@ export default function App() {
     };
   }, []);
 
-  // Keyboard shortcut for Find & Replace (Ctrl/Cmd+R)
+  // Keyboard shortcut for Find & Replace (Ctrl/Cmd+R or Ctrl/Cmd+F)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Check for Ctrl+R (Windows/Linux) or Cmd+R (macOS)
-      if ((e.ctrlKey || e.metaKey) && e.key === 'r' && rows.length > 0) {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'r' || e.key === 'f') && rows.length > 0) {
         e.preventDefault(); // Prevent browser's default reload
         setSearchReplaceExpanded(true);
         // Focus on search input after state update
@@ -1977,36 +1978,41 @@ export default function App() {
                         placeholder="Search in filenames and categories"
                         disabled={rows.length === 0}
                         onKeyDown={(e) => {
-                          if (e.key === 'Enter' && searchText) handleSearchReplace();
+                          if (e.key === 'Enter' && searchText && showReplaceField) handleSearchReplace();
                           if (e.key === 'Escape') {
+                            setSearchReplaceExpanded(false);
                             setSearchText('');
                             setFilteredRowIndices(null);
                           }
                         }}
                       />
                     </div>
-                    <div className="search-replace-field">
-                      <label htmlFor="replace-text">Replace:</label>
-                      <input
-                        id="replace-text"
-                        type="text"
-                        value={replaceText}
-                        onChange={(e) => setReplaceText(e.target.value)}
-                        placeholder="Replacement text"
-                        disabled={rows.length === 0}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' && searchText) handleSearchReplace();
-                        }}
-                      />
-                    </div>
-                    <button 
-                      className="search-replace-button"
-                      onClick={handleSearchReplace} 
-                      disabled={!searchText || rows.length === 0}
-                      title="Replace all matches in categories"
-                    >
-                      Replace All
-                    </button>
+                    {showReplaceField && (
+                      <>
+                        <div className="search-replace-field">
+                          <label htmlFor="replace-text">Replace:</label>
+                          <input
+                            id="replace-text"
+                            type="text"
+                            value={replaceText}
+                            onChange={(e) => setReplaceText(e.target.value)}
+                            placeholder="Replacement text"
+                            disabled={rows.length === 0}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' && searchText) handleSearchReplace();
+                            }}
+                          />
+                        </div>
+                        <button 
+                          className="search-replace-button"
+                          onClick={handleSearchReplace} 
+                          disabled={!searchText || rows.length === 0}
+                          title="Replace all matches in categories"
+                        >
+                          Replace All
+                        </button>
+                      </>
+                    )}
                   </div>
                   <div className="search-replace-options">
                     <label title="Match exact case">
@@ -2038,6 +2044,15 @@ export default function App() {
                         disabled={rows.length === 0}
                       />
                       Regex
+                    </label>
+                    <label title="Enable replace mode">
+                      <input
+                        type="checkbox"
+                        checked={showReplaceField}
+                        onChange={(e) => setShowReplaceField(e.target.checked)}
+                        disabled={rows.length === 0}
+                      />
+                      Replace
                     </label>
                   </div>
                 </div>
