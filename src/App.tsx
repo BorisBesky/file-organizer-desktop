@@ -233,6 +233,9 @@ export default function App() {
   const [searchWholeWord, setSearchWholeWord] = useState(false);
   const [searchUseRegex, setSearchUseRegex] = useState(false);
   const [filteredRowIndices, setFilteredRowIndices] = useState<number[] | null>(null);
+  const [searchInCategory, setSearchInCategory] = useState(true);
+  const [searchInName, setSearchInName] = useState(true);
+  const [searchInExt, setSearchInExt] = useState(false);
   
   // LLM update check state
   const [autoCheckUpdates, setAutoCheckUpdates] = useState(() => {
@@ -678,62 +681,97 @@ export default function App() {
       return;
     }
 
+    if (!searchInCategory && !searchInName && !searchInExt) {
+      showToast('Please select at least one search scope', 'error');
+      return;
+    }
+
     let matchCount = 0;
     
     try {
       const updatedRows = rows.map(row => {
         let category = row.category;
+        let name = row.name;
+        let ext = row.ext;
         let matched = false;
 
-        if (searchUseRegex) {
-          // Use regex pattern
-          try {
-            const flags = searchCaseSensitive ? 'g' : 'gi';
-            const regex = new RegExp(searchText, flags);
-            if (regex.test(category)) {
-              category = category.replace(regex, replaceText);
-              matched = true;
+        const performReplace = (text: string): string => {
+          if (searchUseRegex) {
+            try {
+              const flags = searchCaseSensitive ? 'g' : 'gi';
+              const regex = new RegExp(searchText, flags);
+              return text.replace(regex, replaceText);
+            } catch (e) {
+              throw new Error(`Invalid regex pattern: ${e instanceof Error ? e.message : 'Unknown error'}`);
             }
-          } catch (e) {
-            throw new Error(`Invalid regex pattern: ${e instanceof Error ? e.message : 'Unknown error'}`);
-          }
-        } else if (searchWholeWord) {
-          // Match whole words only
-          const regex = new RegExp(
-            `\\b${searchText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`,
-            searchCaseSensitive ? 'g' : 'gi'
-          );
-          if (regex.test(category)) {
-            category = category.replace(regex, replaceText);
-            matched = true;
-          }
-        } else {
-          // Match anywhere in the string
-          const searchPattern = searchCaseSensitive ? searchText : searchText.toLowerCase();
-          const categoryToSearch = searchCaseSensitive ? category : category.toLowerCase();
-          
-          if (categoryToSearch.includes(searchPattern)) {
-            if (searchCaseSensitive) {
-              category = category.split(searchText).join(replaceText);
-            } else {
-              // Case-insensitive replace
-              const regex = new RegExp(searchText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
-              category = category.replace(regex, replaceText);
+          } else if (searchWholeWord) {
+            const regex = new RegExp(
+              `\\b${searchText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`,
+              searchCaseSensitive ? 'g' : 'gi'
+            );
+            return text.replace(regex, replaceText);
+          } else {
+            const searchPattern = searchCaseSensitive ? searchText : searchText.toLowerCase();
+            const textToSearch = searchCaseSensitive ? text : text.toLowerCase();
+            
+            if (textToSearch.includes(searchPattern)) {
+              if (searchCaseSensitive) {
+                return text.split(searchText).join(replaceText);
+              } else {
+                const regex = new RegExp(searchText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+                return text.replace(regex, replaceText);
+              }
             }
-            matched = true;
           }
+          return text;
+        };
+
+        const testMatch = (text: string): boolean => {
+          if (searchUseRegex) {
+            try {
+              const flags = searchCaseSensitive ? '' : 'i';
+              const regex = new RegExp(searchText, flags);
+              return regex.test(text);
+            } catch {
+              return false;
+            }
+          } else if (searchWholeWord) {
+            const regex = new RegExp(
+              `\\b${searchText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`,
+              searchCaseSensitive ? '' : 'i'
+            );
+            return regex.test(text);
+          } else {
+            const searchPattern = searchCaseSensitive ? searchText : searchText.toLowerCase();
+            const textToSearch = searchCaseSensitive ? text : text.toLowerCase();
+            return textToSearch.includes(searchPattern);
+          }
+        };
+
+        if (searchInCategory && testMatch(category)) {
+          category = performReplace(category);
+          matched = true;
+        }
+        if (searchInName && testMatch(name)) {
+          name = performReplace(name);
+          matched = true;
+        }
+        if (searchInExt && testMatch(ext)) {
+          ext = performReplace(ext);
+          matched = true;
         }
 
         if (matched) {
           matchCount++;
         }
 
-        return { ...row, category };
+        return { ...row, category, name, ext };
       });
 
       if (matchCount > 0) {
         setRows(updatedRows);
-        showToast(`Replaced in ${matchCount} categor${matchCount === 1 ? 'y' : 'ies'}`, 'success');
+        const scopes = [searchInCategory && 'category', searchInName && 'name', searchInExt && 'ext'].filter(Boolean);
+        showToast(`Replaced in ${matchCount} file${matchCount === 1 ? '' : 's'} (${scopes.join(', ')})`, 'success');
       } else {
         showToast('No matches found', 'info');
       }
@@ -828,12 +866,18 @@ export default function App() {
       return;
     }
 
+    if (!searchInCategory && !searchInName && !searchInExt) {
+      setFilteredRowIndices(null);
+      return;
+    }
+
     try {
       const matchingIndices: number[] = [];
       
       rows.forEach((row, index) => {
         const category = row.category;
         const filename = row.name;
+        const extension = row.ext;
         let matched = false;
 
         const testMatch = (text: string) => {
@@ -854,8 +898,10 @@ export default function App() {
           }
         };
 
-        // Search in both category and filename
-        if (testMatch(category) || testMatch(filename)) {
+        // Search in selected scopes
+        if ((searchInCategory && testMatch(category)) ||
+            (searchInName && testMatch(filename)) ||
+            (searchInExt && testMatch(extension))) {
           matched = true;
         }
 
@@ -869,7 +915,7 @@ export default function App() {
       // Invalid regex or other error - show all rows
       setFilteredRowIndices(null);
     }
-  }, [searchText, searchCaseSensitive, searchWholeWord, searchUseRegex, rows, searchReplaceExpanded]);
+  }, [searchText, searchCaseSensitive, searchWholeWord, searchUseRegex, searchInCategory, searchInName, searchInExt, rows, searchReplaceExpanded]);
 
   // Auto-check for updates on startup (if enabled)
   useEffect(() => {
@@ -1672,16 +1718,40 @@ export default function App() {
 
   // Bulk select functions
   const handleSelectAll = (checked: boolean) => {
-    setRows((prev: Row[]) => prev.map((r: Row) => ({ ...r, enabled: checked })));
+    if (filteredRowIndices !== null) {
+      // Only affect filtered rows
+      const filteredIndicesSet = new Set(filteredRowIndices);
+      setRows((prev: Row[]) => 
+        prev.map((r: Row, index: number) => 
+          filteredIndicesSet.has(index) ? { ...r, enabled: checked } : r
+        )
+      );
+    } else {
+      // Affect all rows
+      setRows((prev: Row[]) => prev.map((r: Row) => ({ ...r, enabled: checked })));
+    }
   };
 
   const getSelectAllState = () => {
     if (rows.length === 0) return { checked: false, indeterminate: false };
-    const enabledCount = rows.filter(r => r.enabled).length;
-    return {
-      checked: enabledCount === rows.length,
-      indeterminate: enabledCount > 0 && enabledCount < rows.length
-    };
+    
+    if (filteredRowIndices !== null) {
+      // Only consider filtered rows
+      if (filteredRowIndices.length === 0) return { checked: false, indeterminate: false };
+      const filteredRows = filteredRowIndices.map(i => rows[i]);
+      const enabledCount = filteredRows.filter(r => r.enabled).length;
+      return {
+        checked: enabledCount === filteredRows.length,
+        indeterminate: enabledCount > 0 && enabledCount < filteredRows.length
+      };
+    } else {
+      // Consider all rows
+      const enabledCount = rows.filter(r => r.enabled).length;
+      return {
+        checked: enabledCount === rows.length,
+        indeterminate: enabledCount > 0 && enabledCount < rows.length
+      };
+    }
   };
 
   const testLLMConnection = async () => {
@@ -2106,6 +2176,34 @@ export default function App() {
                         disabled={rows.length === 0}
                       />
                       Replace
+                    </label>
+                    <span className="search-separator">|</span>
+                    <label title="Search in category">
+                      <input
+                        type="checkbox"
+                        checked={searchInCategory}
+                        onChange={(e) => setSearchInCategory(e.target.checked)}
+                        disabled={rows.length === 0}
+                      />
+                      Category
+                    </label>
+                    <label title="Search in filename">
+                      <input
+                        type="checkbox"
+                        checked={searchInName}
+                        onChange={(e) => setSearchInName(e.target.checked)}
+                        disabled={rows.length === 0}
+                      />
+                      Name
+                    </label>
+                    <label title="Search in extension">
+                      <input
+                        type="checkbox"
+                        checked={searchInExt}
+                        onChange={(e) => setSearchInExt(e.target.checked)}
+                        disabled={rows.length === 0}
+                      />
+                      Ext
                     </label>
                   </div>
                 </div>
