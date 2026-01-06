@@ -1792,7 +1792,9 @@ export default function App() {
               <div className="progress-container">
                 <div 
                   className={`progress-bar ${scanState === 'completed' ? 'progress-bar-completed' : scanState === 'stopped' ? 'progress-bar-stopped' : ''}`}
-                  style={{ width: `${(progress.current / progress.total) * 100}%` }}
+                  ref={(el) => {
+                    if (el) el.style.setProperty('--progress-width', `${(progress.current / progress.total) * 100}%`);
+                  }}
                 />
               </div>
               <div className="progress-text">
@@ -1817,7 +1819,9 @@ export default function App() {
                 {optimizedCategories.total > 0 ? (
                   <div 
                     className="progress-bar progress-bar-completed"
-                    style={{ width: `${(optimizedCategories.count / optimizedCategories.total) * 100}%` }}
+                    ref={(el) => {
+                      if (el) el.style.setProperty('--progress-width', `${(optimizedCategories.count / optimizedCategories.total) * 100}%`);
+                    }}
                   />
                 ) : (
                   <div className="progress-bar progress-bar-indeterminate" />
@@ -1903,7 +1907,12 @@ export default function App() {
       {/* Main Layout: Sidebar + Content */}
       <div className="app-main">
         {/* Left Sidebar */}
-        <aside className="app-sidebar" style={{ width: sidebarCollapsed ? '0px' : `${sidebarWidth}px` }}>
+        <aside 
+          className="app-sidebar"
+          ref={(el) => {
+            if (el) el.style.setProperty('--sidebar-width', sidebarCollapsed ? '0px' : `${sidebarWidth}px`);
+          }}
+        >
           {!sidebarCollapsed && (
             <>
               {/* LLM Configuration */}
@@ -2103,13 +2112,24 @@ export default function App() {
               )}
               
               <div className="scroll-x">
-                <table className="resizable-table">
+                <table 
+                  className="resizable-table"
+                  ref={(el) => {
+                    if (el) {
+                      el.style.setProperty('--col-apply-width', `${columnWidths.apply}px`);
+                      el.style.setProperty('--col-source-width', `${columnWidths.source}px`);
+                      el.style.setProperty('--col-category-width', `${columnWidths.category}px`);
+                      el.style.setProperty('--col-filename-width', `${columnWidths.filename}px`);
+                      el.style.setProperty('--col-ext-width', `${columnWidths.ext}px`);
+                    }
+                  }}
+                >
                   <colgroup>
-                    <col style={{ width: `${columnWidths.apply}px` }} />
-                    <col style={{ width: `${columnWidths.source}px` }} />
-                    <col style={{ width: `${columnWidths.category}px` }} />
-                    <col style={{ width: `${columnWidths.filename}px` }} />
-                    <col style={{ width: `${columnWidths.ext}px` }} />
+                    <col />
+                    <col />
+                    <col />
+                    <col />
+                    <col />
                   </colgroup>
                   <thead>
                     <tr>
@@ -2129,7 +2149,6 @@ export default function App() {
                       <th 
                         className="sortable-header" 
                         onClick={() => handleSort('source')}
-                        style={{ cursor: 'pointer' }}
                         title="Click to sort by source path"
                       >
                         Source {getSortIcon('source')}
@@ -2138,7 +2157,6 @@ export default function App() {
                       <th 
                         className="sortable-header" 
                         onClick={() => handleSort('category')}
-                        style={{ cursor: 'pointer' }}
                         title="Click to sort by category"
                       >
                         Category {getSortIcon('category')}
@@ -2147,7 +2165,6 @@ export default function App() {
                       <th 
                         className="sortable-header" 
                         onClick={() => handleSort('filename')}
-                        style={{ cursor: 'pointer' }}
                         title="Click to sort by filename"
                       >
                         Filename {getSortIcon('filename')}
@@ -2156,7 +2173,6 @@ export default function App() {
                       <th 
                         className="sortable-header" 
                         onClick={() => handleSort('extension')}
-                        style={{ cursor: 'pointer' }}
                         title="Click to sort by extension"
                       >
                         Ext {getSortIcon('extension')}
@@ -2249,35 +2265,15 @@ export default function App() {
         <div
           role="status"
           aria-live="polite"
-          style={{
-            position: 'fixed',
-            right: '20px',
-            bottom: '20px',
-            background: '#333',
-            color: '#fff',
-            padding: '10px 14px',
-            borderRadius: '6px',
-            boxShadow: '0 6px 18px rgba(0,0,0,0.25)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '12px',
-            zIndex: 9999,
-          }}
+          className="snackbar"
         >
-          <div style={{ fontSize: '0.95rem' }}>{snackbarMessage}</div>
+          <div className="snackbar-message">{snackbarMessage}</div>
           {snackbarActionLabel && (
             <button
               onClick={() => {
                 if (snackbarOnActionRef.current) snackbarOnActionRef.current();
               }}
-              style={{
-                background: 'transparent',
-                color: '#ffd54f',
-                border: '1px solid rgba(255, 255, 255, 0.08)',
-                borderRadius: '4px',
-                padding: '6px 10px',
-                cursor: 'pointer'
-              }}
+              className="snackbar-action"
             >
               {snackbarActionLabel}
             </button>
@@ -2285,14 +2281,7 @@ export default function App() {
           <button
             onClick={hideSnackbar}
             aria-label="Dismiss notification"
-            style={{
-              background: 'transparent',
-              color: '#fff',
-              border: 'none',
-              cursor: 'pointer',
-              fontSize: '1.2rem',
-              lineHeight: 1,
-            }}
+            className="snackbar-close"
           >
             ×
           </button>
@@ -2300,37 +2289,13 @@ export default function App() {
       )}
       {toastMessage && (
         <div
-          style={{
-            position: 'fixed',
-            top: '20px',
-            right: '20px',
-            backgroundColor: toastMessage.type === 'error' ? '#f44336' : toastMessage.type === 'success' ? '#4caf50' : '#2196f3',
-            color: '#fff',
-            padding: '12px 20px',
-            borderRadius: '4px',
-            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
-            zIndex: 10000,
-            maxWidth: '400px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '12px',
-            animation: 'slideInRight 0.3s ease-out',
-          }}
+          className={`toast toast-${toastMessage.type}`}
         >
-          <span style={{ flex: 1 }}>{toastMessage.message}</span>
+          <span className="toast-message">{toastMessage.message}</span>
           {toastMessage.action && (
             <button
               onClick={toastMessage.action.onClick}
-              style={{
-                background: 'rgba(255, 255, 255, 0.2)',
-                color: '#fff',
-                border: '1px solid rgba(255, 255, 255, 0.5)',
-                cursor: 'pointer',
-                fontSize: '0.9rem',
-                padding: '6px 12px',
-                borderRadius: '4px',
-                fontWeight: 600,
-              }}
+              className="toast-action"
             >
               {toastMessage.action.label}
             </button>
@@ -2338,15 +2303,7 @@ export default function App() {
           <button
             onClick={() => setToastMessage(null)}
             aria-label="Close toast"
-            style={{
-              background: 'transparent',
-              color: '#fff',
-              border: 'none',
-              cursor: 'pointer',
-              fontSize: '1.2rem',
-              lineHeight: 1,
-              padding: '0',
-            }}
+            className="toast-close"
           >
             ×
           </button>

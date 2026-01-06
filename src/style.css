@@ -320,7 +320,7 @@ body {
 }
 
 .status-toggle {
-  background: transparent;
+  background: --bg-primary;
   border: none;
   padding: 4px 0;
   font-size: 13px;
@@ -370,9 +370,10 @@ body {
   gap: 16px;
   position: relative;
   transition: width 0.3s ease, padding 0.3s ease, border-width 0.3s ease;
+  width: var(--sidebar-width, 320px);
 }
 
-.app-sidebar[style*="width: 0px"] {
+.app-sidebar[style*="--sidebar-width: 0px"] {
   padding: 0;
   border-right-width: 0;
   overflow: hidden;
@@ -586,6 +587,27 @@ thead {
   user-select: none;
 }
 
+/* Column widths via CSS custom properties */
+.resizable-table col:nth-child(1) {
+  width: var(--col-apply-width, 60px);
+}
+
+.resizable-table col:nth-child(2) {
+  width: var(--col-source-width, 250px);
+}
+
+.resizable-table col:nth-child(3) {
+  width: var(--col-category-width, 200px);
+}
+
+.resizable-table col:nth-child(4) {
+  width: var(--col-filename-width, 250px);
+}
+
+.resizable-table col:nth-child(5) {
+  width: var(--col-ext-width, 80px);
+}
+
 .resize-handle {
   position: absolute;
   top: 0;
@@ -635,6 +657,7 @@ th {
 .sortable-header {
   transition: background-color 0.15s ease;
   position: relative;
+  cursor: pointer;
 }
 
 .sortable-header:hover {
@@ -1060,6 +1083,7 @@ label input[type="checkbox"] {
   background-color: var(--accent-blue);
   transition: width 0.3s ease;
   border-radius: 3px;
+  width: var(--progress-width, 0%);
 }
 
 .progress-bar-completed {
@@ -1284,8 +1308,8 @@ label input[type="checkbox"] {
 select.config-input {
   background-color: var(--bg-input);
   color: var(--text-primary);
-  appearance: none;
   -webkit-appearance: none;
+  appearance: none;
 }
 
 select.config-input option {
@@ -1773,7 +1797,6 @@ select.config-input option {
 
 .checkbox-label {
   cursor: pointer;
-  user-select: none;
   font-size: 13px;
   color: var(--text-tertiary);
   white-space: nowrap;
@@ -2339,7 +2362,6 @@ select.config-input option {
   font-size: 13px;
   color: var(--text-primary);
   cursor: pointer;
-  user-select: none;
 }
 
 .search-replace-options input[type="checkbox"] {
