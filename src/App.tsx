@@ -1555,6 +1555,7 @@ export default function App() {
     setBusy(true);
     setScanState('organizing');
     const selected = rows.filter((r: Row) => r.enabled);
+    const unselected = rows.filter((r: Row) => !r.enabled);
     const totalToMove = selected.length;
     const totalAnalyzed = rows.length;
     let movedCount = 0;
@@ -1577,14 +1578,39 @@ export default function App() {
       }
     }
     
-    setRows([]);
-    const summary = `Done. Analyzed ${totalAnalyzed} files, organized ${movedCount} files${failedCount > 0 ? `, ${failedCount} failed` : ''}.`;
-    setEvents((prev: string[]) => [summary, ...prev]);
-    setScanState('idle');
-    setBusy(false);
+    // Keep unselected rows for further review or processing
+    setRows(unselected);
     
-    // Clear saved state after applying changes
-    clearProcessedState();
+    // Update scanControlRef to reflect only unselected files remain
+    if (scanControlRef.current.processedFiles.length > 0) {
+      const unselectedSrcs = new Set(unselected.map(r => r.src));
+      scanControlRef.current.processedFiles = scanControlRef.current.processedFiles.filter(
+        file => unselectedSrcs.has(file.src)
+      );
+    }
+    
+    // Check if there are more files to scan
+    const hasMoreFilesToScan = scanControlRef.current.currentFileIndex < scanControlRef.current.allFiles.length;
+    
+    const summary = `Done. Analyzed ${totalAnalyzed} files, organized ${movedCount} files${failedCount > 0 ? `, ${failedCount} failed` : ''}${unselected.length > 0 ? `. ${unselected.length} files remain for review.` : '.'}`;
+    setEvents((prev: string[]) => [summary, ...prev]);
+    
+    // If there are unselected files OR more files to scan, allow resuming the scan
+    if (unselected.length > 0 || hasMoreFilesToScan) {
+      setScanState('stopped');
+      if (hasMoreFilesToScan && unselected.length === 0) {
+        const remainingCount = scanControlRef.current.allFiles.length - scanControlRef.current.currentFileIndex;
+        setEvents((prev: string[]) => [`${remainingCount} files remaining to scan. Press "Resume Scan" to continue.`, ...prev]);
+      } else if (unselected.length > 0) {
+        setEvents((prev: string[]) => ['You can continue to review remaining files or resume scanning.', ...prev]);
+      }
+    } else {
+      setScanState('idle');
+      // Clear saved state only if all files were processed
+      clearProcessedState();
+    }
+    
+    setBusy(false);
   };
 
   const updateRow = (i: number, patch: Partial<Row>) => {
