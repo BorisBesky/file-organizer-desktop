@@ -2100,7 +2100,7 @@ export default function App() {
                         setFilteredRowIndices(null);
                       }
                     }} 
-                    disabled={rows.length === 0}
+                    disabled={rows.length === 0 || scanState === 'scanning'}
                   >
                     {searchReplaceExpanded ? 'Hide Find & Replace' : 'Find & Replace'}
                   </button>
@@ -2127,7 +2127,7 @@ export default function App() {
                         value={searchText}
                         onChange={(e) => setSearchText(e.target.value)}
                         placeholder="Search in filenames and categories"
-                        disabled={rows.length === 0}
+                        disabled={rows.length === 0 || scanState === 'scanning'}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter' && searchText && showReplaceField) handleSearchReplace();
                           if (e.key === 'Escape') {
@@ -2148,7 +2148,7 @@ export default function App() {
                             value={replaceText}
                             onChange={(e) => setReplaceText(e.target.value)}
                             placeholder="Replacement text"
-                            disabled={rows.length === 0}
+                            disabled={rows.length === 0 || scanState === 'scanning'}
                             onKeyDown={(e) => {
                               if (e.key === 'Enter' && searchText) handleSearchReplace();
                             }}
@@ -2157,7 +2157,7 @@ export default function App() {
                         <button 
                           className="search-replace-button"
                           onClick={handleSearchReplace} 
-                          disabled={!searchText || rows.length === 0}
+                          disabled={!searchText || rows.length === 0 || scanState === 'scanning'}
                           title="Replace all matches in categories"
                         >
                           Replace All
@@ -2171,7 +2171,7 @@ export default function App() {
                         type="checkbox"
                         checked={searchCaseSensitive}
                         onChange={(e) => setSearchCaseSensitive(e.target.checked)}
-                        disabled={rows.length === 0}
+                        disabled={rows.length === 0 || scanState === 'scanning'}
                       />
                       Case sensitive
                     </label>
@@ -2180,7 +2180,7 @@ export default function App() {
                         type="checkbox"
                         checked={searchWholeWord}
                         onChange={(e) => setSearchWholeWord(e.target.checked)}
-                        disabled={rows.length === 0 || searchUseRegex}
+                        disabled={rows.length === 0 || searchUseRegex || scanState === 'scanning'}
                       />
                       Whole word
                     </label>
@@ -2192,7 +2192,7 @@ export default function App() {
                           setSearchUseRegex(e.target.checked);
                           if (e.target.checked) setSearchWholeWord(false);
                         }}
-                        disabled={rows.length === 0}
+                        disabled={rows.length === 0 || scanState === 'scanning'}
                       />
                       Regex
                     </label>
@@ -2201,7 +2201,7 @@ export default function App() {
                         type="checkbox"
                         checked={showReplaceField}
                         onChange={(e) => setShowReplaceField(e.target.checked)}
-                        disabled={rows.length === 0}
+                        disabled={rows.length === 0 || scanState === 'scanning'}
                       />
                       Replace
                     </label>
@@ -2211,7 +2211,7 @@ export default function App() {
                         type="checkbox"
                         checked={searchInCategory}
                         onChange={(e) => setSearchInCategory(e.target.checked)}
-                        disabled={rows.length === 0}
+                        disabled={rows.length === 0 || scanState === 'scanning'}
                       />
                       Category
                     </label>
@@ -2220,7 +2220,7 @@ export default function App() {
                         type="checkbox"
                         checked={searchInName}
                         onChange={(e) => setSearchInName(e.target.checked)}
-                        disabled={rows.length === 0}
+                        disabled={rows.length === 0 || scanState === 'scanning'}
                       />
                       Name
                     </label>
@@ -2229,7 +2229,7 @@ export default function App() {
                         type="checkbox"
                         checked={searchInExt}
                         onChange={(e) => setSearchInExt(e.target.checked)}
-                        disabled={rows.length === 0}
+                        disabled={rows.length === 0 || scanState === 'scanning'}
                       />
                       Ext
                     </label>
