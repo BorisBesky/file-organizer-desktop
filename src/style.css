@@ -1582,6 +1582,14 @@ select.config-input option {
   flex-wrap: wrap;
 }
 
+.update-dialog-footer-with-checkbox {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
 .footer-buttons {
   display: flex;
   gap: 8px;

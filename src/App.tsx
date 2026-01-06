@@ -1,10 +1,10 @@
-import React, { useEffect, useMemo, useState, useRef } from 'react';
-import { classifyViaLLM, optimizeCategoriesViaLLM, LLMConfig, DEFAULT_CONFIGS, LLMProviderType, openFile, FileContent, checkLLMServerUpdate, checkAppUpdate } from './api';
+import React, { useEffect, useMemo, useState, useRef, useCallback } from 'react';
+import { classifyViaLLM, optimizeCategoriesViaLLM, LLMConfig, DEFAULT_CONFIGS, LLMProviderType, openFile, FileContent, checkLLMServerUpdate, checkAppUpdate, AppUpdateInfo, LLMServerUpdateInfo } from './api';
 import { invoke } from '@tauri-apps/api/tauri';
 import { listen } from '@tauri-apps/api/event';
 import { open as openUrl } from '@tauri-apps/api/shell';
 import { ScanState, ManagedLLMConfig, SavedProcessedState } from './types';
-import { LLMConfigPanel, HelpDialog, AboutDialog, ManagedLLMDialog } from './components';
+import { LLMConfigPanel, HelpDialog, AboutDialog, ManagedLLMDialog, UpdateCheckDialog } from './components';
 import { debugLogger } from './debug-logger';
 
 function sanitizeFilename(name: string) {
@@ -247,6 +247,13 @@ export default function App() {
   const toastTimeoutRef = useRef<number | null>(null);
   const [pendingUpdateVersion, setPendingUpdateVersion] = useState<string | null>(null);
   const [showUpdateDownloadDialog, setShowUpdateDownloadDialog] = useState(false);
+  
+  // Update check dialog state
+  const [showUpdateCheckDialog, setShowUpdateCheckDialog] = useState(false);
+  const [checkingUpdates, setCheckingUpdates] = useState(false);
+  const [appUpdateInfo, setAppUpdateInfo] = useState<AppUpdateInfo | null>(null);
+  const [llmUpdateInfo, setLlmUpdateInfo] = useState<LLMServerUpdateInfo | null>(null);
+  const [updateCheckError, setUpdateCheckError] = useState<string | null>(null);
   
   // Sorting state
   const [sortBy, setSortBy] = useState<SortField>('source');
@@ -735,6 +742,41 @@ export default function App() {
     }
   };
 
+  // Manual check for updates
+  const handleCheckForUpdates = useCallback(async () => {
+    setShowUpdateCheckDialog(true);
+    setCheckingUpdates(true);
+    setUpdateCheckError(null);
+    setAppUpdateInfo(null);
+    setLlmUpdateInfo(null);
+    
+    try {
+      // Check both app and LLM server updates in parallel
+      const [appInfo, llmInfo] = await Promise.all([
+        checkAppUpdate(),
+        llmConfig.provider === 'managed-local' ? checkLLMServerUpdate() : Promise.resolve(null)
+      ]);
+      
+      setAppUpdateInfo(appInfo);
+      if (llmInfo) {
+        setLlmUpdateInfo(llmInfo);
+        if (llmInfo.update_available && llmInfo.latest_version) {
+          setPendingUpdateVersion(llmInfo.latest_version);
+        }
+      }
+    } catch (error) {
+      setUpdateCheckError(error instanceof Error ? error.message : 'Failed to check for updates');
+      debugLogger.error('UPDATE_CHECK', 'Manual update check failed', { error });
+    } finally {
+      setCheckingUpdates(false);
+    }
+  }, [llmConfig.provider]);
+  
+  const handleDownloadLLMUpdate = () => {
+    setShowUpdateCheckDialog(false);
+    setShowUpdateDownloadDialog(true);
+  };
+
   useEffect(() => {
     const unlistenHelp = listen('show-help', () => {
       setHelpOpen(true);
@@ -742,15 +784,19 @@ export default function App() {
     const unlistenAbout = listen('show-about', () => {
       setAboutOpen(true);
     });
+    const unlistenCheckUpdates = listen('check-updates', () => {
+      handleCheckForUpdates();
+    });
     const unlistenOpenDirectory = listen('open-directory', () => {
       pickDirectory();
     });
     return () => {
       unlistenHelp.then(f => f());
       unlistenAbout.then(f => f());
+      unlistenCheckUpdates.then(f => f());
       unlistenOpenDirectory.then(f => f());
     };
-  }, []);
+  }, [handleCheckForUpdates]);
 
   // Keyboard shortcut for Find & Replace (Ctrl/Cmd+R or Ctrl/Cmd+F)
   useEffect(() => {
@@ -2166,13 +2212,24 @@ export default function App() {
 
       {/* Help and About Dialogs */}
       <HelpDialog isOpen={helpOpen} onClose={() => setHelpOpen(false)} />
-      <AboutDialog 
-        isOpen={aboutOpen} 
-        onClose={() => setAboutOpen(false)} 
+      <AboutDialog
+        isOpen={aboutOpen}
+        onClose={() => setAboutOpen(false)}
+        managedLLMConfig={managedLLMConfig}
+      />
+
+      {/* Update Check Dialog */}
+      <UpdateCheckDialog
+        isOpen={showUpdateCheckDialog}
+        onClose={() => setShowUpdateCheckDialog(false)}
+        checking={checkingUpdates}
+        appUpdateInfo={appUpdateInfo}
+        llmUpdateInfo={llmUpdateInfo}
+        error={updateCheckError}
         llmProvider={llmConfig.provider}
+        onDownloadLLMUpdate={handleDownloadLLMUpdate}
         autoCheckUpdates={autoCheckUpdates}
         onToggleAutoCheckUpdates={handleToggleAutoCheckUpdates}
-        managedLLMConfig={managedLLMConfig}
       />
 
       {/* Update Download Dialog from Toast */}

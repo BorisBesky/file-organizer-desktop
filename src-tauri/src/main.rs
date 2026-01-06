@@ -1640,6 +1640,7 @@ fn create_menu() -> Menu {
                 "File Organizer",
                 Menu::new()
                     .add_item(CustomMenuItem::new("about".to_string(), "About File Organizer"))
+                    .add_item(CustomMenuItem::new("check-updates".to_string(), "Check for Updates..."))
                     .add_native_item(MenuItem::Separator)
                     .add_native_item(MenuItem::Hide)
                     .add_native_item(MenuItem::HideOthers)
@@ -1690,6 +1691,9 @@ fn handle_menu_event(event: WindowMenuEvent) {
         }
         "about" => {
             let _ = event.window().emit("show-about", ());
+        }
+        "check-updates" => {
+            let _ = event.window().emit("check-updates", ());
         }
         "open_directory" => {
             let _ = event.window().emit("open-directory", ());

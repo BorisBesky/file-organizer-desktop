@@ -4,3 +4,4 @@ export { default as LLMConfigPanel } from './LLMConfigPanel';
 export { default as HelpDialog } from './HelpDialog';
 export { default as AboutDialog } from './AboutDialog';
 export { default as ManagedLLMDialog } from './ManagedLLMDialog';
+export { default as UpdateCheckDialog } from './UpdateCheckDialog';
