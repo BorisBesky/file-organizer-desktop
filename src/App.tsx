@@ -1843,33 +1843,31 @@ export default function App() {
             </div>
           )}
 
-          {!!events.length && (
-            <div className="header-status">
-              <div className="status-header-row">
-                <button
-                  type="button"
-                  className="status-toggle"
-                  onClick={() => setStatusExpanded(!statusExpanded)}
-                >
-                  <span className="toggle-icon">{statusExpanded ? '▼' : '▶'}</span>
-                  <span>Status Log</span>
-                </button>
-                <div className="status-latest">
-                  {events[0]}
-                </div>
+          <div className="header-status">
+            <div className="status-header-row">
+              <button
+                type="button"
+                className="status-toggle"
+                onClick={() => setStatusExpanded(!statusExpanded)}
+              >
+                <span className="toggle-icon">{statusExpanded ? '▼' : '▶'}</span>
+                <span>Status Log</span>
+              </button>
+              <div className="status-latest">
+                {events.length > 0 ? events[0] : 'Ready to organize files'}
               </div>
-              {statusExpanded && (
-                <textarea
-                  readOnly
-                  rows={4}
-                  value={events.join('\n')}
-                  className="status-textarea"
-                  aria-label="Status events log"
-                  title="Status events log"
-                />
-              )}
             </div>
-          )}
+            {statusExpanded && (
+              <textarea
+                readOnly
+                rows={4}
+                value={events.length > 0 ? events.join('\n') : 'No status messages yet. Start a scan to see progress here.'}
+                className="status-textarea"
+                aria-label="Status events log"
+                title="Status events log"
+              />
+            )}
+          </div>
           
           <div className="header-toggle-container">
             <button 

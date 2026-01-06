@@ -15,6 +15,7 @@
   --accent-blue: #007aff;
   --accent-blue-hover: #0051d5;
   --accent-blue-active: #004bb8;
+  --accent-grey-bg: #3b4550;
   --accent-green: #34c759;
   --accent-red: #ff3b30;
   --accent-orange: #ff9500;
@@ -61,6 +62,8 @@ body.dark-theme {
   --accent-green: #30d158;
   --accent-red: #ff453a;
   --accent-orange: #ff9f0a;
+  --accent-grey-bg: #3b4550;
+  --accent-grey-bg-hover: #4a5560;
   --danger-hover: #e52d22;
   --danger-active: #cc2619;
   --warning-hover: #e08600;
@@ -90,6 +93,22 @@ body.dark-theme {
   --scrollbar-thumb-hover: #636366;
   --button-disabled-bg: #3a3a3c;
   --button-disabled-text: #636366;
+}
+
+/* Dark mode button styles */
+body.dark-theme button {
+  background: var(--accent-grey-bg);
+  border: none;
+}
+
+body.dark-theme button:hover:not(:disabled) {
+  background: var(--accent-grey-bg-hover);
+  border: 1px solid var(--accent-grey-bg-hover);
+}
+
+body.dark-theme button:active:not(:disabled) {
+  background: var(--accent-blue-active);
+  border: 1px solid var(--accent-grey-bg-hover);
 }
 
 body {
@@ -140,6 +159,7 @@ body {
 }
 
 .header-scan-buttons {
+  background: var(--bg-primary);
   display: flex;
   align-items: center;
   gap: 8px;
