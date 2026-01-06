@@ -1601,6 +1601,8 @@ export default function App() {
       if (hasMoreFilesToScan && unselected.length === 0) {
         const remainingCount = scanControlRef.current.allFiles.length - scanControlRef.current.currentFileIndex;
         setEvents((prev: string[]) => [`${remainingCount} files remaining to scan. Press "Resume Scan" to continue.`, ...prev]);
+        // Update progress to reflect remaining files to scan
+        setProgress({ current: scanControlRef.current.currentFileIndex, total: scanControlRef.current.allFiles.length });
       } else if (unselected.length > 0) {
         setEvents((prev: string[]) => ['You can continue to review remaining files or resume scanning.', ...prev]);
       }
