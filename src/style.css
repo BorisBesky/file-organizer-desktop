@@ -2,100 +2,227 @@
   /* Font size multiplier - can be adjusted via keyboard shortcuts */
   --font-size-multiplier: 1;
   
-  /* Light theme colors */
+  /* Default to light theme - macOS Tahoe Style */
   --bg-primary: #ffffff;
   --bg-secondary: #f5f5f7;
-  --bg-tertiary: #fafafa;
+  --bg-tertiary: #e8e8ed;
   --bg-input: #ffffff;
-  --text-primary: #000000;
-  --text-secondary: #6e6e73;
-  --text-tertiary: #333333;
-  --border-primary: #e5e5e5;
-  --border-secondary: #d1d1d6;
+  --text-primary: #1d1d1f;
+  --text-secondary: #86868b;
+  --text-tertiary: #424245;
+  --border-primary: #d2d2d7;
+  --border-secondary: #c7c7cc;
   --accent-blue: #007aff;
   --accent-blue-hover: #0051d5;
   --accent-blue-active: #004bb8;
-  --accent-grey-bg: #3b4550;
+  --accent-grey-bg: #e5e5ea;
+  --accent-grey-bg-hover: #d1d1d6;
   --accent-green: #34c759;
   --accent-red: #ff3b30;
   --accent-orange: #ff9500;
-  --shadow-sm: rgba(0, 0, 0, 0.1);
-  --shadow-md: rgba(0, 0, 0, 0.15);
-  --shadow-lg: rgba(0, 0, 0, 0.3);
-  --overlay: rgba(0, 0, 0, 0.5);
-  --code-bg: transparent;
-  --code-text: #333;
-  --hover-bg: #0066cc14;
-  --stripe-bg: #fafafa;
-  --status-running-bg: #d4edda;
-  --status-running-text: #155724;
-  --status-running-border: #c3e6cb;
-  --status-stopped-bg: #f8f9fa;
-  --status-stopped-text: #6c757d;
-  --status-stopped-border: #e9ecef;
-  --status-error-bg: #f8d7da;
-  --status-error-text: #721c24;
-  --status-error-border: #f5c6cb;
-  --modal-bg: white;
-  --modal-header-text: #1d1d1f;
-  --scrollbar-track: #f5f5f7;
-  --scrollbar-thumb: #c1c1c6;
-  --scrollbar-thumb-hover: #a1a1a6;
-  --button-disabled-bg: #e5e5e5;
-  --button-disabled-text: #a1a1a6;
-}
-
-body.dark-theme {
-  /* Dark theme colors */
-  --bg-primary: #1c1c1e;
-  --bg-secondary: #2c2c2e;
-  --bg-tertiary: #3a3a3c;
-  --bg-input: #3a3a3c;
-  --text-primary: #ffffff;
-  --text-secondary: #98989d;
-  --text-tertiary: #d1d1d6;
-  --border-primary: #48484a;
-  --border-secondary: #48484a;
-  --accent-blue: #0a84ff;
-  --accent-blue-hover: #409cff;
-  --accent-blue-active: #0070e0;
-  --accent-green: #30d158;
-  --accent-red: #ff453a;
-  --accent-orange: #ff9f0a;
-  --accent-grey-bg: #3b4550;
-  --accent-grey-bg-hover: #4a5560;
   --danger-hover: #e52d22;
   --danger-active: #cc2619;
   --warning-hover: #e08600;
   --warning-active: #c77700;
   --cancel-hover: #d62c21;
-  --shadow-sm: rgba(0, 0, 0, 0.3);
-  --shadow-md: rgba(0, 0, 0, 0.4);
-  --shadow-lg: rgba(0, 0, 0, 0.6);
-  --overlay: rgba(0, 0, 0, 0.7);
-  --code-bg: transparent;
+  --shadow-sm: rgba(0, 0, 0, 0.08);
+  --shadow-md: rgba(0, 0, 0, 0.12);
+  --shadow-lg: rgba(0, 0, 0, 0.25);
+  --overlay: rgba(0, 0, 0, 0.4);
+  --code-bg: rgba(0, 0, 0, 0.04);
+  --code-text: #1d1d1f;
+  --hover-bg: rgba(0, 122, 255, 0.08);
+  --stripe-bg: #f9f9f9;
+  --status-running-bg: #d1f2dd;
+  --status-running-text: #1b6e38;
+  --status-running-border: #a8ddb5;
+  --status-stopped-bg: #f5f5f7;
+  --status-stopped-text: #6e6e73;
+  --status-stopped-border: #d2d2d7;
+  --status-error-bg: #ffdcda;
+  --status-error-text: #c41e3a;
+  --status-error-border: #ffb3b0;
+  --modal-bg: #ffffff;
+  --modal-header-text: #1d1d1f;
+  --scrollbar-track: #f5f5f7;
+  --scrollbar-thumb: #c7c7cc;
+  --scrollbar-thumb-hover: #a1a1a6;
+  --button-disabled-bg: #f5f5f7;
+  --button-disabled-text: #c7c7cc;
+}
+
+/* macOS Light Theme - Tahoe Style */
+body.light-theme {
+  /* macOS Light backgrounds */
+  --bg-primary: #ffffff;
+  --bg-secondary: #f5f5f7;
+  --bg-tertiary: #e8e8ed;
+  --bg-input: #ffffff;
+  
+  /* macOS Light text colors */
+  --text-primary: #1d1d1f;
+  --text-secondary: #86868b;
+  --text-tertiary: #424245;
+  
+  /* macOS Light borders */
+  --border-primary: #d2d2d7;
+  --border-secondary: #c7c7cc;
+  
+  /* macOS System colors (light mode) */
+  --accent-blue: #007aff;
+  --accent-blue-hover: #0051d5;
+  --accent-blue-active: #004bb8;
+  --accent-grey-bg: #e5e5ea;
+  --accent-grey-bg-hover: #d1d1d6;
+  --accent-green: #34c759;
+  --accent-red: #ff3b30;
+  --accent-orange: #ff9500;
+  --danger-hover: #e52d22;
+  --danger-active: #cc2619;
+  --warning-hover: #e08600;
+  --warning-active: #c77700;
+  --cancel-hover: #d62c21;
+  
+  /* macOS Light shadows */
+  --shadow-sm: rgba(0, 0, 0, 0.08);
+  --shadow-md: rgba(0, 0, 0, 0.12);
+  --shadow-lg: rgba(0, 0, 0, 0.25);
+  --overlay: rgba(0, 0, 0, 0.4);
+  
+  /* Code and syntax highlighting */
+  --code-bg: rgba(0, 0, 0, 0.04);
+  --code-text: #1d1d1f;
+  
+  /* Interactive states */
+  --hover-bg: rgba(0, 122, 255, 0.08);
+  --stripe-bg: #f9f9f9;
+  
+  /* Status colors (light mode) */
+  --status-running-bg: #d1f2dd;
+  --status-running-text: #1b6e38;
+  --status-running-border: #a8ddb5;
+  --status-stopped-bg: #f5f5f7;
+  --status-stopped-text: #6e6e73;
+  --status-stopped-border: #d2d2d7;
+  --status-error-bg: #ffdcda;
+  --status-error-text: #c41e3a;
+  --status-error-border: #ffb3b0;
+  
+  /* Modal and overlay */
+  --modal-bg: #ffffff;
+  --modal-header-text: #1d1d1f;
+  
+  /* Scrollbars */
+  --scrollbar-track: #f5f5f7;
+  --scrollbar-thumb: #c7c7cc;
+  --scrollbar-thumb-hover: #a1a1a6;
+  
+  /* Disabled states */
+  --button-disabled-bg: #f5f5f7;
+  --button-disabled-text: #c7c7cc;
+}
+
+/* macOS Dark Theme - Tahoe Style */
+body.dark-theme {
+  /* macOS Dark backgrounds */
+  --bg-primary: #1e1e1e;
+  --bg-secondary: #252525;
+  --bg-tertiary: #2d2d2d;
+  --bg-input: #3a3a3a;
+  
+  /* macOS Dark text colors */
+  --text-primary: #ffffff;
+  --text-secondary: #98989d;
+  --text-tertiary: #d1d1d6;
+  
+  /* macOS Dark borders */
+  --border-primary: #3f3f3f;
+  --border-secondary: #4a4a4a;
+  
+  /* macOS System colors (dark mode) */
+  --accent-blue: #0a84ff;
+  --accent-blue-hover: #409cff;
+  --accent-blue-active: #0070e0;
+  --accent-grey-bg: #464646;
+  --accent-grey-bg-hover: #525252;
+  --accent-green: #30d158;
+  --accent-red: #ff453a;
+  --accent-orange: #ff9f0a;
+  --danger-hover: #e52d22;
+  --danger-active: #cc2619;
+  --warning-hover: #e08600;
+  --warning-active: #c77700;
+  --cancel-hover: #d62c21;
+  
+  /* macOS Dark shadows */
+  --shadow-sm: rgba(0, 0, 0, 0.4);
+  --shadow-md: rgba(0, 0, 0, 0.5);
+  --shadow-lg: rgba(0, 0, 0, 0.7);
+  --overlay: rgba(0, 0, 0, 0.75);
+  
+  /* Code and syntax highlighting */
+  --code-bg: rgba(255, 255, 255, 0.05);
   --code-text: #d1d1d6;
+  
+  /* Interactive states */
   --hover-bg: rgba(10, 132, 255, 0.15);
-  --stripe-bg: #2c2c2e;
-  --status-running-bg: #1c3d2e;
-  --status-running-text: #8ee5b0;
+  --stripe-bg: #252525;
+  
+  /* Status colors (dark mode) */
+  --status-running-bg: #1a3d2e;
+  --status-running-text: #6de29b;
   --status-running-border: #2d5c45;
-  --status-stopped-bg: #2c2c2e;
+  --status-stopped-bg: #2d2d2d;
   --status-stopped-text: #98989d;
-  --status-stopped-border: #48484a;
-  --status-error-bg: #3d1c1c;
+  --status-stopped-border: #3f3f3f;
+  --status-error-bg: #3d1a1a;
   --status-error-text: #ff9999;
   --status-error-border: #5c2d2d;
-  --modal-bg: #2c2c2e;
+  
+  /* Modal and overlay */
+  --modal-bg: #2d2d2d;
   --modal-header-text: #ffffff;
-  --scrollbar-track: #2c2c2e;
-  --scrollbar-thumb: #48484a;
-  --scrollbar-thumb-hover: #636366;
-  --button-disabled-bg: #3a3a3c;
+  
+  /* Scrollbars */
+  --scrollbar-track: #252525;
+  --scrollbar-thumb: #4a4a4a;
+  --scrollbar-thumb-hover: #5a5a5a;
+  
+  /* Disabled states */
+  --button-disabled-bg: #3a3a3a;
   --button-disabled-text: #636366;
 }
 
-/* Dark mode button styles */
+/* Consistent dark mode button styles */
+button {
+  background: var(--accent-grey-bg);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--text-primary);
+  cursor: pointer;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+button:hover:not(:disabled) {
+  background: var(--accent-grey-bg-hover);
+  box-shadow: 0 1px 3px var(--shadow-sm);
+}
+
+button:active:not(:disabled) {
+  background: var(--accent-blue);
+  transform: scale(0.98);
+}
+
+button:disabled {
+  background: var(--button-disabled-bg);
+  color: var(--button-disabled-text);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
 body.dark-theme button {
   background: var(--accent-grey-bg);
   border: none;
@@ -595,11 +722,11 @@ body.dark-theme td input.optimized-category:focus {
 }
 
 td code {
-  font-family: 'SF Mono', Monaco, Menlo, monospace;
-  font-size: 11px;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
+  font-size: 12px;
   background: var(--code-bg);
   padding: 0;
-  color: var(--code-text);
+  color: var(--text-primary);
 }
 
 td input[type="text"] {
@@ -773,7 +900,7 @@ body.dark-theme .optimization-badge {
   font-size: 12px;
 }
 
-/* macOS-style buttons */
+/* macOS-style buttons - dark theme optimized */
 button {
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
   font-size: 13px;
@@ -785,13 +912,13 @@ button {
   cursor: pointer;
   transition: all 0.15s ease;
   background: var(--accent-blue);
-  color: var(--text-primary);
+  color: white;
   white-space: nowrap;
 }
 
 button:hover:not(:disabled) {
   background: var(--accent-blue-hover);
-  box-shadow: 0 1px 4px var(--shadow-md);
+  box-shadow: 0 2px 6px var(--shadow-md);
 }
 
 button:active:not(:disabled) {
@@ -803,6 +930,7 @@ button:disabled {
   background: var(--button-disabled-bg);
   color: var(--button-disabled-text);
   cursor: not-allowed;
+  opacity: 0.5;
 }
 
 button.secondary {
@@ -1347,21 +1475,21 @@ select.config-input option {
 }
 
 .test-message.success {
-  background: #d1f2e5;
-  color: #0d7a4a;
-  border: 1px solid #7ed9a8;
+  background: rgba(48, 209, 88, 0.15);
+  color: var(--accent-green);
+  border: 1px solid rgba(48, 209, 88, 0.3);
 }
 
 .test-message.error {
-  background: #ffe5e5;
-  color: #d1293d;
-  border: 1px solid #ff9999;
+  background: rgba(255, 69, 58, 0.15);
+  color: var(--accent-red);
+  border: 1px solid rgba(255, 69, 58, 0.3);
 }
 
 .test-message.testing {
-  background: #e6f2ff;
-  color: #005fb8;
-  border: 1px solid #99ccff;
+  background: rgba(10, 132, 255, 0.15);
+  color: var(--accent-blue);
+  border: 1px solid rgba(10, 132, 255, 0.3);
 }
 
 /* Modal Styles */
@@ -1380,7 +1508,7 @@ select.config-input option {
   background: none;
   border: none;
   font-size: 28px;
-  color: #6e6e73;
+  color: var(--text-secondary);
   cursor: pointer;
   padding: 0;
   width: 32px;
@@ -1393,7 +1521,7 @@ select.config-input option {
 }
 
 .modal-close:hover {
-  background: #f5f5f7;
+  background: var(--bg-tertiary);
   color: var(--text-primary);
 }
 
@@ -1430,7 +1558,7 @@ select.config-input option {
 
 .button-primary:hover {
   background: var(--accent-blue-hover);
-  box-shadow: 0 2px 8px rgba(0, 122, 255, 0.3);
+  box-shadow: 0 2px 8px rgba(10, 132, 255, 0.4);
 }
 
 /* Help Modal Specific Styles */
