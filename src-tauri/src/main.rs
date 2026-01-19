@@ -1668,6 +1668,7 @@ fn create_menu() -> Menu {
         Menu::new()
             .add_submenu(Submenu::new("File", Menu::new()
                 .add_item(CustomMenuItem::new("open_directory".to_string(), "Open Directory"))
+                .add_item(CustomMenuItem::new("check-updates".to_string(), "Check for Updates..."))
                 .add_native_item(MenuItem::Separator)
                 .add_native_item(MenuItem::Quit)
             ))
